@@ -1,0 +1,24 @@
+# 构建产物
+/web/dist/
+/web/node_modules/
+/ipan
+/ipan.exe
+/ipan-dev.exe
+/dist/
+
+# 运行时数据（SQLite）
+/data/
+/.data-dev/
+*.db
+*.db-shm
+*.db-wal
+
+# 本地环境
+.env
+*.local
+.dev.vars
+
+# 编辑器
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,202 @@
+/* 青春版主题：淡紫蓝背景、白色卡片、柔和渐变主色 */
+:root {
+  color-scheme: light;
+
+  /* 背景 / 表面 / 边框 */
+  --gh-bg: #f3f4fd;
+  --gh-surface: #ffffff;
+  --gh-surface-2: #f7f8fe;
+  --gh-border: #e8eaf9;
+  --gh-border-strong: #d8dcef;
+  /* 悬停/选中时才出现的边框与底色 */
+  --gh-border-hover: #dde2fc;
+  --gh-row-border: #eef0f9;
+  --gh-selected-bg: #f5f6ff;
+
+  /* 文字 */
+  --gh-ink: #272b4a;
+  --gh-ink-soft: #7c80a6;
+  --gh-ink-faint: #b3b8d6;
+
+  /* 主色与渐变 */
+  --gh-primary: #6d7bf5;
+  --gh-primary-deep: #5563ef;
+  --gh-primary-soft: #eef0fe;
+  --gh-gradient: linear-gradient(135deg, #8e9bff 0%, #6673f6 55%, #5563ef 100%);
+
+  /* 状态色 */
+  --gh-danger: #f25767;
+  --gh-success: #22c55e;
+  --gh-warning: #ffa940;
+  --gh-info: #4dabf7;
+  /* 错误提示块 */
+  --gh-danger-bg: #fff0f1;
+  --gh-danger-border: #ffd3d9;
+  --gh-success-border: #b2f2bb;
+
+  /* 半透明表面：顶栏毛玻璃、toast、拖拽遮罩、刷新遮罩 */
+  --gh-surface-blur: rgba(255, 255, 255, 0.82);
+  --gh-surface-pop: rgba(255, 255, 255, 0.97);
+  --gh-overlay-mask: rgba(255, 255, 255, 0.72);
+  /* 进度条轨道 */
+  --gh-track: #e3e6fd;
+  /* 骨架屏 */
+  --gh-skeleton-a: #eef0f9;
+  --gh-skeleton-b: #e3e7f7;
+  /* 滚动条 */
+  --gh-scrollbar: #c9cef0;
+  --gh-scrollbar-hover: #a7afea;
+
+  /* 分类色（文件类型） */
+  --ac-red: #ff6b6b;
+  --ac-red-soft: #ffecec;
+  --ac-blue: #4dabf7;
+  --ac-blue-soft: #e7f3ff;
+  --ac-green: #51cf66;
+  --ac-green-soft: #e9faee;
+  --ac-violet: #9775fa;
+  --ac-violet-soft: #f2ecfe;
+  --ac-orange: #ffa94d;
+  --ac-orange-soft: #fff3e3;
+  --ac-pink: #f783ac;
+  --ac-pink-soft: #ffecf3;
+
+  /* 阴影 */
+  --gh-shadow-sm: 0 2px 10px rgba(93, 106, 235, 0.07);
+  --gh-shadow-md: 0 10px 28px rgba(93, 106, 235, 0.12);
+  --gh-shadow-lg: 0 24px 60px rgba(93, 106, 235, 0.18);
+
+  /* 圆角约定：卡片 16-18px、按钮/输入 10-12px、胶囊 999px */
+  --gh-radius-card: 18px;
+  --gh-radius-control: 10px;
+  --gh-radius-pill: 999px;
+
+  /* 兼容旧组件里使用的变量名 */
+  --gh-sage: var(--gh-primary);
+  --gh-sage-deep: var(--gh-primary-deep);
+  --gh-cream: var(--gh-surface);
+  --gh-cream-soft: var(--gh-surface);
+  --gh-sky: var(--gh-surface-2);
+}
+
+/* 深色主题：只覆盖颜色令牌，布局与圆角沿用上面的定义 */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --gh-bg: #12131c;
+  --gh-surface: #1a1c27;
+  --gh-surface-2: #21232f;
+  --gh-border: #2b2e3d;
+  --gh-border-strong: #3a3e52;
+  --gh-border-hover: #3d4260;
+  --gh-row-border: #262939;
+  --gh-selected-bg: #232744;
+
+  --gh-ink: #e6e8f2;
+  --gh-ink-soft: #9aa0bd;
+  --gh-ink-faint: #6b7091;
+
+  --gh-primary: #8b96ff;
+  --gh-primary-deep: #6d7bf5;
+  --gh-primary-soft: rgba(109, 123, 245, 0.16);
+  --gh-gradient: linear-gradient(135deg, #7d89f0 0%, #6673f6 55%, #5563ef 100%);
+
+  --gh-danger: #ff7b88;
+  --gh-success: #4ade80;
+  --gh-warning: #ffb454;
+  --gh-info: #6bb8ff;
+  --gh-danger-bg: rgba(242, 87, 103, 0.14);
+  --gh-danger-border: rgba(242, 87, 103, 0.38);
+  --gh-success-border: rgba(34, 197, 94, 0.38);
+
+  --gh-surface-blur: rgba(26, 28, 39, 0.82);
+  --gh-surface-pop: rgba(26, 28, 39, 0.97);
+  --gh-overlay-mask: rgba(18, 19, 28, 0.72);
+  --gh-track: #2f3347;
+  --gh-skeleton-a: #232634;
+  --gh-skeleton-b: #2c3044;
+  --gh-scrollbar: #3a3e52;
+  --gh-scrollbar-hover: #4b5069;
+
+  /* 深色下降低分类色饱和度，避免图标过亮刺眼 */
+  --ac-red-soft: #3a2328;
+  --ac-blue-soft: #1e2c3d;
+  --ac-green-soft: #1e3326;
+  --ac-violet-soft: #2a2340;
+  --ac-orange-soft: #3a2c1c;
+  --ac-pink-soft: #3a2330;
+
+  --gh-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.32);
+  --gh-shadow-md: 0 10px 28px rgba(0, 0, 0, 0.42);
+  --gh-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow-x: clip;
+  width: 100%;
+  font-family: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+  background:
+    radial-gradient(1100px 480px at 88% -12%, rgba(109, 123, 245, 0.16), transparent 60%),
+    radial-gradient(900px 420px at -8% 108%, rgba(247, 131, 172, 0.1), transparent 55%),
+    var(--gh-bg);
+  color: var(--gh-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(1100px 480px at 88% -12%, rgba(109, 123, 245, 0.16), transparent 60%),
+    radial-gradient(900px 420px at -8% 108%, rgba(120, 80, 160, 0.12), transparent 55%),
+    var(--gh-bg);
+}
+
+body {
+  font-size: 14px;
+}
+
+a {
+  color: var(--gh-primary);
+}
+
+::selection {
+  background: rgba(109, 123, 245, 0.18);
+}
+
+:root[data-theme="dark"] ::selection {
+  background: rgba(139, 150, 255, 0.3);
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gh-scrollbar);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gh-scrollbar-hover);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.muted {
+  color: var(--gh-ink-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
