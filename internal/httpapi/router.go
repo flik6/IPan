@@ -32,6 +32,7 @@ func (s *Server) Handler() http.Handler {
 		"/api/login/verify":         s.handleLoginVerify,
 		"/api/logout":               s.handleLogout,
 		"/api/settings":             s.handleSettings,
+		"/api/settings/webdav":      s.handleWebDAVSettings,
 		"/api/settings/show-hidden": s.handleShowHidden,
 		"/api/settings/password":    s.handleChangePassword,
 		"/api/list":                 s.handleList,

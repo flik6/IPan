@@ -269,10 +269,17 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	webdav, err := s.webDAVCredentials()
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"signParamConfigured": settings.SignParam != "",
 		"showHidden":          settings.ShowHidden,
 		"kvBound":             true,
+		"webdavConfigured":    webdav.enabled(),
+		"webdavUsername":      webdav.Username,
 	})
 }
 

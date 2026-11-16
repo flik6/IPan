@@ -14,11 +14,12 @@ import { passkeyEnrolled as passkeyEnrolledFn, passkeySupported as passkeySuppor
 import { showToast } from "../stores/toast";
 import { maskPhone } from "../utils/format";
 
-type SectionKey = "account" | "cloud" | "security" | "appearance" | "about";
+type SectionKey = "account" | "cloud" | "webdav" | "security" | "appearance" | "about";
 
 const sections: { key: SectionKey; label: string; icon: string }[] = [
   { key: "account", label: "账号信息", icon: "user" },
   { key: "cloud", label: "云盘账号", icon: "cloud" },
+  { key: "webdav", label: "WebDAV", icon: "link" },
   { key: "security", label: "访问与安全", icon: "shield" },
   { key: "appearance", label: "显示偏好", icon: "eye" },
   { key: "about", label: "关于", icon: "file" },
@@ -125,6 +126,88 @@ async function handleRegisterPasskey(): Promise<void> {
   }
 }
 
+// ---- WebDAV ----
+const webdavOpen = ref(false);
+const webdavUser = ref("");
+const webdavPass = ref("");
+const webdavConfirm = ref("");
+const webdavBusy = ref(false);
+const webdavDisableBusy = ref(false);
+const webdavUrl = computed(() => `${window.location.origin}/dav/`);
+
+function openWebdavForm(): void {
+  webdavUser.value = settings.webdavUsername || "webdav";
+  webdavPass.value = "";
+  webdavConfirm.value = "";
+  webdavOpen.value = true;
+}
+
+function closeWebdavForm(): void {
+  if (webdavBusy.value) return;
+  webdavOpen.value = false;
+}
+
+async function saveWebdav(): Promise<void> {
+  if (webdavBusy.value) return;
+  const username = webdavUser.value.trim();
+  const password = webdavPass.value;
+  if (!username) {
+    showToast("请输入 WebDAV 用户名", "warning");
+    return;
+  }
+  if (username.includes(":")) {
+    showToast("WebDAV 用户名不能包含冒号", "warning");
+    return;
+  }
+  if (password.length < 4) {
+    showToast("WebDAV 密码至少 4 位", "warning");
+    return;
+  }
+  if (password !== webdavConfirm.value) {
+    showToast("两次输入的 WebDAV 密码不一致", "warning");
+    return;
+  }
+  webdavBusy.value = true;
+  try {
+    await api("/api/settings/webdav", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    await loadSettings();
+    webdavOpen.value = false;
+    showToast("WebDAV 已启用", "success");
+  } catch (e) {
+    showToast((e as Error).message, "error");
+  } finally {
+    webdavBusy.value = false;
+  }
+}
+
+async function disableWebdav(): Promise<void> {
+  if (webdavDisableBusy.value) return;
+  webdavDisableBusy.value = true;
+  try {
+    await api("/api/settings/webdav", { method: "DELETE" });
+    await loadSettings();
+    webdavOpen.value = false;
+    showToast("WebDAV 已关闭", "success");
+  } catch (e) {
+    showToast((e as Error).message, "error");
+  } finally {
+    webdavDisableBusy.value = false;
+  }
+}
+
+async function copyWebdavUrl(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(webdavUrl.value);
+    showToast("已复制 WebDAV 地址", "success");
+  } catch {
+    showToast("复制失败，请手动复制", "error");
+  }
+}
+
 onMounted(() => void loadSettings());
 </script>
 
@@ -205,6 +288,73 @@ onMounted(() => void loadSettings());
             <InfoHint text="查看绑定状态、容量与令牌自动保活情况。" />
           </header>
           <CloudAccountForm mode="settings" />
+        </div>
+
+        <!-- WebDAV -->
+        <div v-show="active === 'webdav'" class="pane">
+          <header class="pane-head">
+            <h2>WebDAV</h2>
+            <InfoHint text="通过 /dav/ 挂载云盘。WebDAV 凭据独立于网页访问密码。" />
+          </header>
+
+          <div class="webdav-summary">
+            <div>
+              <span class="webdav-status" :class="{ enabled: settings.webdavConfigured }">
+                {{ settings.webdavConfigured ? "已启用" : "未启用" }}
+              </span>
+              <strong>{{ settings.webdavConfigured ? settings.webdavUsername : "配置独立访问凭据" }}</strong>
+              <p class="muted">客户端填写下方地址，并使用这里设置的用户名和密码登录。</p>
+            </div>
+            <NButton type="primary" :disabled="webdavBusy" @click="openWebdavForm">
+              {{ settings.webdavConfigured ? "修改凭据" : "启用 WebDAV" }}
+            </NButton>
+          </div>
+
+          <div class="webdav-url">
+            <code>{{ webdavUrl }}</code>
+            <NButton size="small" @click="copyWebdavUrl">复制地址</NButton>
+          </div>
+
+          <form v-if="webdavOpen" class="pwd-form webdav-form" @submit.prevent="saveWebdav">
+            <div class="password-field">
+              <label for="webdav-username">用户名</label>
+              <NInput
+                v-model:value="webdavUser"
+                :disabled="webdavBusy"
+                placeholder="例如 webdav"
+                :input-props="{ id: 'webdav-username', autocomplete: 'username' }"
+              />
+            </div>
+            <div class="password-field">
+              <label for="webdav-password">密码</label>
+              <NInput
+                v-model:value="webdavPass"
+                type="password"
+                show-password-on="click"
+                :disabled="webdavBusy"
+                placeholder="至少 4 位"
+                :input-props="{ id: 'webdav-password', autocomplete: 'new-password' }"
+              />
+            </div>
+            <div class="password-field">
+              <label for="webdav-confirm">确认密码</label>
+              <NInput
+                v-model:value="webdavConfirm"
+                type="password"
+                show-password-on="click"
+                :disabled="webdavBusy"
+                :input-props="{ id: 'webdav-confirm', autocomplete: 'new-password' }"
+              />
+            </div>
+            <div class="pwd-actions">
+              <NButton v-if="settings.webdavConfigured" type="error" secondary :loading="webdavDisableBusy" :disabled="webdavBusy" @click="disableWebdav">
+                关闭 WebDAV
+              </NButton>
+              <span class="form-spacer" />
+              <NButton :disabled="webdavBusy" @click="closeWebdavForm">取消</NButton>
+              <NButton type="primary" attr-type="submit" :loading="webdavBusy">保存</NButton>
+            </div>
+          </form>
         </div>
 
         <!-- 访问与安全 -->
@@ -573,7 +723,7 @@ onMounted(() => void loadSettings());
   .settings-shell { grid-template-columns: 1fr; gap: 24px; }
   .settings-nav {
     position: static;
-    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
     overflow-x: auto;
     border-bottom: 1px solid var(--op-rule-strong);
   }
@@ -1302,7 +1452,7 @@ onMounted(() => void loadSettings());
   .settings .settings-shell { grid-template-columns: 1fr; gap: 16px; }
   .settings .settings-nav {
     position: static;
-    grid-template-columns: repeat(5, minmax(110px, 1fr));
+    grid-template-columns: repeat(6, minmax(110px, 1fr));
     grid-auto-flow: column;
     overflow-x: auto;
     padding: 6px;
@@ -1317,5 +1467,64 @@ onMounted(() => void loadSettings());
   .settings .theme-options { grid-template-columns: 1fr; }
   .settings .password-field:first-child { grid-column: auto; }
   .settings .setting-row { align-items: flex-start; flex-direction: column; gap: 10px; }
+}
+</style>
+
+<style scoped>
+.webdav-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid var(--op-rule);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.webdav-summary > div { display: grid; gap: 4px; min-width: 0; }
+.webdav-summary strong { color: var(--op-ink); font-size: 14px; font-weight: 600; }
+.webdav-summary p { margin: 0; color: var(--op-ink-soft); font-size: 12px; }
+
+.webdav-status {
+  justify-self: start;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--op-ink-soft);
+  background: var(--op-surface-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.webdav-status.enabled { color: var(--op-success); background: var(--op-success-soft); }
+
+.webdav-url {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--op-rule);
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.webdav-url code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--op-ink);
+  font-family: var(--op-font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.webdav-form { margin-top: 0; }
+.form-spacer { flex: 1; }
+
+@media (max-width: 640px) {
+  .webdav-summary { align-items: flex-start; flex-direction: column; }
+  .webdav-url { align-items: flex-start; flex-direction: column; }
+  .webdav-url .n-button { align-self: flex-end; }
 }
 </style>

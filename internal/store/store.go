@@ -175,6 +175,110 @@ func (s *Store) LoadSettings() (Settings, error) {
 // SaveSetting 是 SetSetting 的别名，语义更清晰。
 func (s *Store) SaveSetting(key, value string) error { return s.SetSetting(key, value) }
 
+// WebDAVCredentials 保存 WebDAV 用户名及 Basic/Digest 校验所需的 HA1 摘要。
+type WebDAVCredentials struct {
+	Username  string
+	MD5HA1    string
+	SHA256HA1 string
+	Managed   bool
+}
+
+// Enabled 判断 WebDAV 凭据是否完整。
+func (c WebDAVCredentials) Enabled() bool {
+	return c.Username != "" && c.MD5HA1 != "" && c.SHA256HA1 != ""
+}
+
+const (
+	keyWebDAVUser    = "webdavUser"
+	keyWebDAVMd5     = "webdavMd5"
+	keyWebDAVSha256  = "webdavSha256"
+	keyWebDAVManaged = "webdavManaged"
+)
+
+// LoadWebDAV 读取后台配置的 WebDAV 凭据。
+func (s *Store) LoadWebDAV() (WebDAVCredentials, error) {
+	rows, err := s.db.Query(
+		`SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?)`,
+		keyWebDAVUser, keyWebDAVMd5, keyWebDAVSha256, keyWebDAVManaged,
+	)
+	if err != nil {
+		return WebDAVCredentials{}, err
+	}
+	defer rows.Close()
+
+	var out WebDAVCredentials
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return WebDAVCredentials{}, err
+		}
+		switch key {
+		case keyWebDAVUser:
+			out.Username = value
+		case keyWebDAVMd5:
+			out.MD5HA1 = value
+		case keyWebDAVSha256:
+			out.SHA256HA1 = value
+		case keyWebDAVManaged:
+			out.Managed = value == "1"
+		}
+	}
+	return out, rows.Err()
+}
+
+// SaveWebDAV 原子写入 WebDAV 凭据。
+func (s *Store) SaveWebDAV(creds WebDAVCredentials) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for key, value := range map[string]string{
+		keyWebDAVUser:    creds.Username,
+		keyWebDAVMd5:     creds.MD5HA1,
+		keyWebDAVSha256:  creds.SHA256HA1,
+		keyWebDAVManaged: "1",
+	} {
+		if _, err := tx.Exec(
+			`INSERT INTO settings (key, value) VALUES (?, ?)
+			 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+			key, value,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ClearWebDAV 删除后台配置的 WebDAV 凭据。
+func (s *Store) ClearWebDAV() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(
+		`DELETE FROM settings WHERE key IN (?, ?, ?)`,
+		keyWebDAVUser, keyWebDAVMd5, keyWebDAVSha256,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(
+		`INSERT INTO settings (key, value) VALUES (?, '1')
+		 ON CONFLICT(key) DO UPDATE SET value = '1'`,
+		keyWebDAVManaged,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // ---------- 云盘令牌 ----------
 
 // Tokens 是云盘令牌。

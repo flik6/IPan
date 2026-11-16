@@ -12,7 +12,7 @@ interface UiState {
   mobileNav: boolean;
   fileViewMode: "list" | "grid";
   /** 设置页当前分类，顶栏入口可直接定位 */
-  settingsSection: "account" | "cloud" | "security" | "appearance" | "about";
+  settingsSection: "account" | "cloud" | "webdav" | "security" | "appearance" | "about";
   // 弹窗
   showResolve: boolean;
   showPreview: boolean;

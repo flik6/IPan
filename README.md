@@ -29,13 +29,13 @@
 ### Docker Compose（推荐）
 
 ```bash
-cp .env.example .env      # 可选：改端口、设置预置密码等
-docker compose up -d --build
+docker compose up -d
 ```
 
 打开 `http://localhost:8080`，首次访问会引导设置访问密码，然后用手机号 + 短信验证码绑定云盘账号。
 
 数据保存在名为 `ipan-data` 的 Docker 卷里（挂载到容器的 `/app/data`），重建容器不会丢失。
+普通使用不需要 `.env` 或配置文件，访问密码、云盘绑定、WebDAV 凭据都在网页后台设置。
 
 ### Docker（不使用 compose）
 
@@ -71,22 +71,17 @@ go run ./cmd/ipan -listen :8080 -data ./data -static ./web/dist
 
 前端热更新开发时，另开一个终端跑 `npm run dev`（在 `web/` 目录），Vite 会把 `/api` 代理到 `http://127.0.0.1:8080`。
 
-## 配置
+## 高级配置
 
-所有配置都通过环境变量传入。首次启动后，访问密码、签名密钥、云盘令牌会写入数据库并优先生效；
-环境变量只作为「库里没有记录时」的初始值。
+正常使用不需要环境变量。访问密码、签名密钥、云盘令牌、Passkey 和 WebDAV 凭据都会写入 SQLite；
+以下环境变量只用于自动化部署、反向代理或高级调试。
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `IPAN_PORT` | `8080` | docker compose 映射到宿主机的端口 |
 | `IPAN_LISTEN` | `:8080` | 容器内监听地址（直接跑二进制时使用） |
 | `IPAN_DATA_DIR` | `./data` | 数据目录，SQLite 文件为 `ipan.db` |
 | `IPAN_PUBLIC_URL` | 自动推断 | 生成分享链接时使用的站点地址，反向代理场景建议显式设置 |
 | `IPAN_TRUST_PROXY` | `false` | 信任 `X-Forwarded-*`。放在 Nginx/Traefik 后面时**必须**打开，否则 Passkey 拿不到正确域名 |
-| `APP_TOKEN` | 空 | 预置访问密码。留空则首次访问时引导设置 |
-| `SIGN_PARAM` | 空 | 文件床签名密钥。留空则自动随机生成并持久化 |
-| `WOPAN_ACCESS_TOKEN` | 空 | 预置云盘 access token。也可在页面登录后自动写入 |
-| `WOPAN_REFRESH_TOKEN` | 空 | 预置 refresh token，用于自动保活 |
 | `WOPAN_BASE_URL` | `https://panservice.mail.wo.cn` | 云盘接口域名 |
 | `WOPAN_ZONE_URL` | 动态发现 | 上传域名；留空时通过 `GetZoneInfo` 自动发现 |
 | `WOPAN_SPACE_TYPE` | `0` | `0`=个人空间，`1`=家庭空间 |
@@ -128,11 +123,11 @@ IPAN_TRUST_PROXY=true
 
 ## WebDAV 挂载
 
-先绑定联通云盘账号，再同时设置 `IPAN_WEBDAV_USER` 和 `IPAN_WEBDAV_PASSWORD` 并重启 iPan。
-用户名不能包含冒号。这组凭据独立于网页访问密码，留空任意一项时 `/dav/` 返回 404。
+先绑定联通云盘账号，再进入 **设置 → WebDAV**，设置独立用户名和密码并保存，立即生效，无需重启。
+用户名不能包含冒号；关闭 WebDAV 后 `/dav/` 返回 404。凭据保存在 SQLite，不保存明文密码。
 WebDAV 客户端填写 `https://你的域名/dav/`，可使用 Basic 或 Digest 认证。HTTP 连接使用 Digest。
 rclone 的存储类型选 `webdav`，供应商选 `other`。
-在反向代理后挂载时，设置 `IPAN_TRUST_PROXY=true` 并转发 `X-Forwarded-Proto`。将 `IPAN_PUBLIC_URL` 设为客户端使用的外部地址，确保 COPY 和 MOVE 的绝对目标地址能通过校验。 [RFC 7616](https://www.rfc-editor.org/rfc/rfc7616)
+在反向代理后挂载时，设置 `IPAN_TRUST_PROXY=true` 并转发 `X-Forwarded-Proto`；将 `IPAN_PUBLIC_URL` 设为客户端使用的外部地址，确保 COPY 和 MOVE 的绝对目标地址能通过校验。 [RFC 7616](https://www.rfc-editor.org/rfc/rfc7616)
 
 支持 `OPTIONS`、`GET`、`HEAD`、`PUT`、`DELETE`、`MKCOL`、`COPY`、`MOVE`、`PROPFIND`、`PROPPATCH`、`LOCK` 和 `UNLOCK`。
 接口按 RFC 4918 实现。目录枚举支持 `Depth: 0` 和 `Depth: 1`，省略 Depth 或请求 `Depth: infinity` 时返回 403 和 `propfind-finite-depth`，客户端可逐层枚举。
@@ -194,7 +189,7 @@ web/                Vue 3 前端（由 Go 直接托管构建产物）
 | POST | `/api/login/send-code` | 发送短信验证码 |
 | POST | `/api/login/verify` | 校验验证码并保存云盘令牌 |
 | POST | `/api/logout` | 清除会话 Cookie |
-| GET/POST | `/api/settings` · `/settings/show-hidden` · `/settings/password` | 应用设置 |
+| GET/POST | `/api/settings` · `/settings/show-hidden` · `/settings/password` · `/settings/webdav` | 应用设置；WebDAV 支持 GET/POST/DELETE |
 | GET | `/api/list?parentId=&page=&pageSize=` | 列目录 |
 | POST | `/api/mkdir` · `/rename` · `/delete` · `/move` · `/copy` | 文件操作 |
 | POST | `/api/upload/init` · `/upload/part` | 浏览器分片上传 |

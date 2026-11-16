@@ -19,8 +19,12 @@ const davPrefix = "/dav"
 const davMethods = "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK"
 
 func (s *Server) handleDAV(w http.ResponseWriter, r *http.Request) {
-	user, password := s.cfg.WebDAVUser, s.cfg.WebDAVPassword
-	if user == "" || password == "" || strings.Contains(user, ":") {
+	creds, err := s.webDAVCredentials()
+	if err != nil {
+		davError(w, err)
+		return
+	}
+	if !creds.enabled() {
 		http.NotFound(w, r)
 		return
 	}
@@ -29,7 +33,7 @@ func (s *Server) handleDAV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Allow", davMethods)
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
-	if r.Method != http.MethodOptions && !s.authenticateDAV(w, r) {
+	if r.Method != http.MethodOptions && !s.authenticateDAV(w, r, creds) {
 		return
 	}
 	name, err := davPath(r.URL)

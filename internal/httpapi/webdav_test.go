@@ -433,3 +433,51 @@ func TestDAVDigestOnHTTP(t *testing.T) {
 		}
 	}
 }
+
+func TestWebDAVSettingsFromAdmin(t *testing.T) {
+	cloud := &davTestCloud{files: make(map[string]davTestFile)}
+	upstream := httptest.NewServer(cloud)
+	t.Cleanup(upstream.Close)
+
+	server, _, _ := newTestServer(t)
+	server.cfg.WopanAccessToken = davTestToken
+	server.cfg.WopanBaseURL = upstream.URL
+	server.cfg.WopanZoneURL = upstream.URL
+	server.cfg.PublicBaseURL = davTestOrigin
+	server.cfg.WebDAVUser = "dav-env"
+	server.cfg.WebDAVPassword = "dav-env-password"
+	handler := server.Handler()
+
+	do(t, handler, http.MethodPost, "/api/setup", `{"password":"test1234"}`, "")
+	rec := do(t, handler, http.MethodPost, "/api/settings/webdav",
+		`{"username":"dav-admin","password":"dav-admin-password"}`, "test1234")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save WebDAV settings: %d %s", rec.Code, rec.Body)
+	}
+
+	settings := do(t, handler, http.MethodGet, "/api/settings", "", "test1234")
+	body := decode(t, settings)
+	if body["webdavConfigured"] != true || body["webdavUsername"] != "dav-admin" {
+		t.Fatalf("unexpected WebDAV settings response: %v", body)
+	}
+
+	propfind := func() int {
+		req := httptest.NewRequest("PROPFIND", davTestOrigin+"/dav/", strings.NewReader(""))
+		req.SetBasicAuth("dav-admin", "dav-admin-password")
+		req.Header.Set("Depth", "0")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := propfind(); code != http.StatusMultiStatus {
+		t.Fatalf("WebDAV credentials from settings: got %d", code)
+	}
+
+	rec = do(t, handler, http.MethodDelete, "/api/settings/webdav", "", "test1234")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear WebDAV settings: %d %s", rec.Code, rec.Body)
+	}
+	if code := propfind(); code != http.StatusNotFound {
+		t.Fatalf("WebDAV should be disabled after clearing settings: got %d", code)
+	}
+}

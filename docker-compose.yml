@@ -1,22 +1,15 @@
 services:
   ipan:
-    build:
-      context: .
-      args:
-        VERSION: ${IPAN_VERSION:-dev}
-    image: ipan:latest
+    image: ghcr.io/flik6/ipan:latest
     container_name: ipan
     restart: unless-stopped
     ports:
-      - "${IPAN_PORT:-8080}:8080"
-    env_file:
-      - path: .env
-        required: false
+      - "8080:8080"
     environment:
-      TZ: ${TZ:-Asia/Shanghai}
+      TZ: Asia/Shanghai
       IPAN_DATA_DIR: /app/data
       # 反向代理（Nginx / Traefik）后面部署时打开，用于识别真实域名与协议
-      IPAN_TRUST_PROXY: ${IPAN_TRUST_PROXY:-false}
+      # IPAN_TRUST_PROXY: "true"
     volumes:
       - ipan-data:/app/data
     healthcheck:

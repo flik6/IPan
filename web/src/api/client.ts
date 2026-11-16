@@ -143,6 +143,8 @@ export interface AppSettingsResult {
   signParamConfigured: boolean;
   showHidden: boolean;
   kvBound: boolean;
+  webdavConfigured: boolean;
+  webdavUsername: string;
 }
 
 /** 联通云盘官方账号资料（GET /api/user/profile） */

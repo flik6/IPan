@@ -16,6 +16,54 @@ import (
 const davRealm = "iPan WebDAV"
 const davNonceTTL = 5 * time.Minute
 
+type davCredentials struct {
+	Username  string
+	MD5HA1    string
+	SHA256HA1 string
+}
+
+func (c davCredentials) enabled() bool {
+	return c.Username != "" && c.MD5HA1 != "" && c.SHA256HA1 != ""
+}
+
+func makeDAVCredentials(username, password string) davCredentials {
+	base := username + ":" + davRealm + ":" + password
+	return davCredentials{
+		Username:  username,
+		MD5HA1:    fmt.Sprintf("%x", md5.Sum([]byte(base))),
+		SHA256HA1: fmt.Sprintf("%x", sha256.Sum256([]byte(base))),
+	}
+}
+
+// webDAVCredentials 优先读取后台配置，环境变量仅作为兼容回退。
+func (s *Server) webDAVCredentials() (davCredentials, error) {
+	stored, err := s.store.LoadWebDAV()
+	if err != nil {
+		return davCredentials{}, err
+	}
+	if stored.Managed {
+		if stored.Enabled() {
+			return davCredentials{
+				Username:  stored.Username,
+				MD5HA1:    stored.MD5HA1,
+				SHA256HA1: stored.SHA256HA1,
+			}, nil
+		}
+		return davCredentials{}, nil
+	}
+	if stored.Enabled() {
+		return davCredentials{
+			Username:  stored.Username,
+			MD5HA1:    stored.MD5HA1,
+			SHA256HA1: stored.SHA256HA1,
+		}, nil
+	}
+	if s.cfg.WebDAVUser != "" && s.cfg.WebDAVPassword != "" && !strings.Contains(s.cfg.WebDAVUser, ":") {
+		return makeDAVCredentials(s.cfg.WebDAVUser, s.cfg.WebDAVPassword), nil
+	}
+	return davCredentials{}, nil
+}
+
 type davDigest struct {
 	secret string
 	mu     sync.Mutex
@@ -29,20 +77,18 @@ type davNonceCount struct {
 	window  uint64
 }
 
-func (s *Server) authenticateDAV(w http.ResponseWriter, r *http.Request) bool {
-	user, password := s.cfg.WebDAVUser, s.cfg.WebDAVPassword
+func (s *Server) authenticateDAV(w http.ResponseWriter, r *http.Request, creds davCredentials) bool {
 	proto, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Proto"), ",")
 	secure := r.TLS != nil || s.cfg.TrustProxy && strings.EqualFold(strings.TrimSpace(proto), "https")
 	if secure {
 		gotUser, gotPassword, ok := r.BasicAuth()
-		expected := sha256.Sum256([]byte(password))
-		supplied := sha256.Sum256([]byte(gotPassword))
-		if ok && gotUser == user && subtle.ConstantTimeCompare(expected[:], supplied[:]) == 1 {
+		supplied := fmt.Sprintf("%x", sha256.Sum256([]byte(gotUser+":"+davRealm+":"+gotPassword)))
+		if ok && gotUser == creds.Username && subtle.ConstantTimeCompare([]byte(supplied), []byte(creds.SHA256HA1)) == 1 {
 			return true
 		}
 	}
 	now := time.Now()
-	ok, stale := s.davAuth.authenticate(r, user, password, now)
+	ok, stale := s.davAuth.authenticate(r, creds, now)
 	if ok {
 		return true
 	}
@@ -67,14 +113,14 @@ func (d *davDigest) nonce(now time.Time) string {
 	return value + "." + base64.RawURLEncoding.EncodeToString(mac)
 }
 
-func (d *davDigest) authenticate(r *http.Request, user, password string, now time.Time) (ok, stale bool) {
+func (d *davDigest) authenticate(r *http.Request, creds davCredentials, now time.Time) (ok, stale bool) {
 	scheme, value, _ := strings.Cut(r.Header.Get("Authorization"), " ")
 	if !strings.EqualFold(scheme, "Digest") || len(value) > 8192 {
 		return false, false
 	}
 	params := parseDAVDigest(value)
 	uri := params["uri"]
-	if params["username"] != user || params["realm"] != davRealm || params["qop"] != "auth" ||
+	if params["username"] != creds.Username || params["realm"] != davRealm || params["qop"] != "auth" ||
 		uri == "" || uri != r.URL.RequestURI() && uri != r.RequestURI {
 		return false, false
 	}
@@ -99,16 +145,18 @@ func (d *davDigest) authenticate(r *http.Request, user, password string, now tim
 	}
 	expires := time.Unix(unix, 0).Add(davNonceTTL)
 	var hash func(string) string
+	var ha1 string
 	switch strings.ToUpper(params["algorithm"]) {
 	case "SHA-256":
 		hash = func(s string) string { return fmt.Sprintf("%x", sha256.Sum256([]byte(s))) }
+		ha1 = creds.SHA256HA1
 	case "", "MD5":
 		// RFC 2617 clients use MD5. Newer clients can select SHA-256.
 		hash = func(s string) string { return fmt.Sprintf("%x", md5.Sum([]byte(s))) }
+		ha1 = creds.MD5HA1
 	default:
 		return false, false
 	}
-	ha1 := hash(user + ":" + davRealm + ":" + password)
 	ha2 := hash(r.Method + ":" + uri)
 	expected := hash(strings.Join([]string{ha1, nonce, params["nc"], params["cnonce"], "auth", ha2}, ":"))
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(params["response"])) != 1 {

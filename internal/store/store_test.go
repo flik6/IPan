@@ -187,3 +187,26 @@ func TestPasskeyCredentials(t *testing.T) {
 		t.Fatalf("缺失凭证应返回 ErrNotFound: %v", err)
 	}
 }
+
+func TestWebDAVCredentials(t *testing.T) {
+	st := newTestStore(t)
+	got, err := st.LoadWebDAV()
+	if err != nil || got.Enabled() {
+		t.Fatalf("初始 WebDAV 凭据应为空: %+v %v", got, err)
+	}
+	want := WebDAVCredentials{Username: "dav", MD5HA1: "md5", SHA256HA1: "sha256", Managed: true}
+	if err := st.SaveWebDAV(want); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.LoadWebDAV()
+	if err != nil || got != want {
+		t.Fatalf("WebDAV 凭据读取不一致: %+v %v", got, err)
+	}
+	if err := st.ClearWebDAV(); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.LoadWebDAV()
+	if err != nil || got.Enabled() || !got.Managed {
+		t.Fatalf("清除后 WebDAV 凭据应为空: %+v %v", got, err)
+	}
+}
