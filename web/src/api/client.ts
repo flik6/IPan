@@ -143,6 +143,7 @@ export interface AppSettingsResult {
   showHidden: boolean;
   webdavConfigured: boolean;
   webdavUsername: string;
+  webdavDirectDownload: boolean;
 }
 
 /** 联通云盘官方账号资料（GET /api/user/profile） */

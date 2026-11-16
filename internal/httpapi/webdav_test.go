@@ -185,7 +185,7 @@ func (c *davTestCloud) dispatch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func newDAVTest(t *testing.T) (http.Handler, *davTestCloud) {
+func newDAVTestServer(t *testing.T) (*Server, *davTestCloud) {
 	t.Helper()
 	cloud := &davTestCloud{files: make(map[string]davTestFile)}
 	upstream := httptest.NewServer(cloud)
@@ -197,6 +197,15 @@ func newDAVTest(t *testing.T) (http.Handler, *davTestCloud) {
 	server.cfg.WopanBaseURL = upstream.URL
 	server.cfg.WopanZoneURL = upstream.URL
 	server.cfg.PublicBaseURL = davTestOrigin
+	return server, cloud
+}
+
+func newDAVTest(t *testing.T) (http.Handler, *davTestCloud) {
+	t.Helper()
+	server, cloud := newDAVTestServer(t)
+	if err := server.store.SaveWebDAVDirectDownload(false); err != nil {
+		t.Fatal(err)
+	}
 	return server.Handler(), cloud
 }
 
@@ -305,6 +314,57 @@ func TestDAVFilesAndConditions(t *testing.T) {
 		if strings.HasPrefix(entry.name, ".ipan-dav-") {
 			t.Fatalf("left a staging resource: %+v", entry)
 		}
+	}
+}
+
+func TestDAVDirectDownload(t *testing.T) {
+	server, _ := newDAVTestServer(t)
+	handler := server.Handler()
+	const file = "/dav/direct.txt"
+	davTestRequest(t, handler, 201, "PUT", file, "abcdef")
+
+	gateway := httptest.NewServer(handler)
+	t.Cleanup(gateway.Close)
+	client := gateway.Client()
+	redirects := 0
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		redirects++
+		return nil
+	}
+
+	request, err := http.NewRequest(http.MethodGet, gateway.URL+file, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.SetBasicAuth("dav", "dav-test-password")
+	request.Header.Set("Range", "bytes=1-3")
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+	if redirects != 1 || response.StatusCode != http.StatusPartialContent || string(body) != "bcd" {
+		t.Fatalf("direct Range download: redirects=%d status=%d body=%q", redirects, response.StatusCode, body)
+	}
+
+	if err := server.store.SaveWebDAVDirectDownload(false); err != nil {
+		t.Fatal(err)
+	}
+	redirects = 0
+	request, err = http.NewRequest(http.MethodGet, gateway.URL+file, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.SetBasicAuth("dav", "dav-test-password")
+	response, err = client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, _ = io.ReadAll(response.Body)
+	if redirects != 0 || response.StatusCode != http.StatusOK || string(body) != "abcdef" {
+		t.Fatalf("proxied download: redirects=%d status=%d body=%q", redirects, response.StatusCode, body)
 	}
 }
 
@@ -487,6 +547,17 @@ func TestWebDAVSettingsFromAdmin(t *testing.T) {
 	body := decode(t, settings)
 	if body["webdavConfigured"] != true || body["webdavUsername"] != "dav-admin" {
 		t.Fatalf("unexpected WebDAV settings response: %v", body)
+	}
+	if body["webdavDirectDownload"] != true {
+		t.Fatalf("download direct should default to true: %v", body)
+	}
+	rec = do(t, handler, http.MethodPost, "/api/settings/webdav/direct-download", `{"directDownload":false}`, "test1234")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save WebDAV direct download: %d %s", rec.Code, rec.Body)
+	}
+	settings = do(t, handler, http.MethodGet, "/api/settings", "", "test1234")
+	if body = decode(t, settings); body["webdavDirectDownload"] != false {
+		t.Fatalf("unexpected direct download setting: %v", body)
 	}
 
 	propfind := func() int {

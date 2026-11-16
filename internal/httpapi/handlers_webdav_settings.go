@@ -13,6 +13,10 @@ type webDAVSettingsRequest struct {
 	Password string `json:"password"`
 }
 
+type webDAVDirectDownloadRequest struct {
+	DirectDownload *bool `json:"directDownload"`
+}
+
 func (s *Server) handleWebDAVSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -21,10 +25,16 @@ func (s *Server) handleWebDAVSettings(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
+		directDownload, err := s.store.LoadWebDAVDirectDownload()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"configured": creds.enabled(),
-			"username":   creds.Username,
-			"path":       "/dav/",
+			"configured":     creds.enabled(),
+			"username":       creds.Username,
+			"path":           "/dav/",
+			"directDownload": directDownload,
 		})
 	case http.MethodPost:
 		var req webDAVSettingsRequest
@@ -74,4 +84,28 @@ func (s *Server) handleWebDAVSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, wopan.Errorf(http.StatusMethodNotAllowed, "method not allowed"))
 	}
+}
+
+func (s *Server) handleWebDAVDirectDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, wopan.Errorf(http.StatusMethodNotAllowed, "method not allowed"))
+		return
+	}
+	var req webDAVDirectDownloadRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if req.DirectDownload == nil {
+		writeError(w, wopan.Errorf(http.StatusBadRequest, "缺少下载直连设置"))
+		return
+	}
+	if err := s.store.SaveWebDAVDirectDownload(*req.DirectDownload); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":             true,
+		"directDownload": *req.DirectDownload,
+	})
 }

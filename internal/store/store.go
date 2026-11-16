@@ -142,9 +142,10 @@ func (s *Store) SetSetting(key, value string) error {
 
 // Settings 是应用配置快照。
 type Settings struct {
-	AppToken   string `json:"appToken"`
-	SignParam  string `json:"signParam"`
-	ShowHidden bool   `json:"showHidden"`
+	AppToken             string `json:"appToken"`
+	SignParam            string `json:"signParam"`
+	ShowHidden           bool   `json:"showHidden"`
+	WebDAVDirectDownload bool   `json:"webdavDirectDownload"`
 }
 
 // LoadSettings 读取全部应用配置。
@@ -154,7 +155,7 @@ func (s *Store) LoadSettings() (Settings, error) {
 		return Settings{}, err
 	}
 	defer rows.Close()
-	var out Settings
+	out := Settings{WebDAVDirectDownload: true}
 	for rows.Next() {
 		var k, v string
 		if err := rows.Scan(&k, &v); err != nil {
@@ -167,6 +168,8 @@ func (s *Store) LoadSettings() (Settings, error) {
 			out.SignParam = v
 		case "showHidden":
 			out.ShowHidden = v == "1" || v == "true"
+		case keyWebDAVDirectDownload:
+			out.WebDAVDirectDownload = v == "1" || v == "true"
 		}
 	}
 	return out, rows.Err()
@@ -189,11 +192,30 @@ func (c WebDAVCredentials) Enabled() bool {
 }
 
 const (
-	keyWebDAVUser    = "webdavUser"
-	keyWebDAVMd5     = "webdavMd5"
-	keyWebDAVSha256  = "webdavSha256"
-	keyWebDAVManaged = "webdavManaged"
+	keyWebDAVUser           = "webdavUser"
+	keyWebDAVMd5            = "webdavMd5"
+	keyWebDAVSha256         = "webdavSha256"
+	keyWebDAVManaged        = "webdavManaged"
+	keyWebDAVDirectDownload = "webdavDirectDownload"
 )
+
+// LoadWebDAVDirectDownload 读取下载直连开关。未配置时默认开启。
+func (s *Store) LoadWebDAVDirectDownload() (bool, error) {
+	value, err := s.GetSetting(keyWebDAVDirectDownload)
+	if err != nil {
+		return false, err
+	}
+	return value == "" || value == "1" || value == "true", nil
+}
+
+// SaveWebDAVDirectDownload 保存下载直连开关。
+func (s *Store) SaveWebDAVDirectDownload(enabled bool) error {
+	value := "0"
+	if enabled {
+		value = "1"
+	}
+	return s.SaveSetting(keyWebDAVDirectDownload, value)
+}
 
 // LoadWebDAV 读取后台配置的 WebDAV 凭据。
 func (s *Store) LoadWebDAV() (WebDAVCredentials, error) {

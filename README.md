@@ -126,6 +126,10 @@ HTTP 连接也能使用 Basic，但密码会以明文传输，建议通过 HTTPS
 rclone 的存储类型选 `webdav`，供应商选 `other`。
 在反向代理后挂载时，转发 `X-Forwarded-Proto` 与 `X-Forwarded-Host` 即可；也可将 `IPAN_PUBLIC_URL` 设为客户端使用的外部地址，确保 COPY 和 MOVE 的绝对目标地址能通过校验。 [RFC 7616](https://www.rfc-editor.org/rfc/rfc7616)
 
+**设置 → WebDAV → 下载直连**默认开启。下载请求会重定向到联通云盘官方直链，文件不再经过 iPan 转发，
+可直接使用 WebDAV 客户端的断点续传。若旧客户端不兼容重定向，可在这里关闭并改由 iPan 中转。
+标准 WebDAV `PUT` 无法携带联通官方上传接口所需的签名参数，因此上传仍由 iPan 分片转发。
+
 支持 `OPTIONS`、`GET`、`HEAD`、`PUT`、`DELETE`、`MKCOL`、`COPY`、`MOVE`、`PROPFIND`、`PROPPATCH`、`LOCK` 和 `UNLOCK`。
 接口按 RFC 4918 实现。目录枚举支持 `Depth: 0` 和 `Depth: 1`，省略 Depth 或请求 `Depth: infinity` 时返回 403 和 `propfind-finite-depth`，客户端可逐层枚举。
 目录 COPY 支持 `Depth: 0` 和 `Depth: infinity`，目录 MOVE 和 DELETE 处理整个子树。 [RFC 4918](https://www.rfc-editor.org/rfc/rfc4918)
@@ -144,7 +148,7 @@ iPan 的适配层负责把路径转换为云盘 ID，并处理云端流式传输
 | 能力 | 联通云盘桌面版 | iPan |
 | --- | --- | --- |
 | 列目录、建目录、改名 | `QueryAllFiles`、`CreateDirectory`、`RenameFileOrDirectory` | WebDAV 复用现有云盘调用，逐段将路径解析为 ID |
-| 下载、分片上传 | `GetDownloadUrlV2`、`/openapi/client/upload2C` | WebDAV 复用直链和分片上传，提供 GET、HEAD、Range 和 PUT |
+| 下载、分片上传 | `GetDownloadUrlV2`、`/openapi/client/upload2C` | WebDAV 下载可直连官方直链；上传复用官方分片接口，提供 GET、HEAD、Range 和 PUT |
 | 批量文件操作 | `/wohome/pass/file/batch/createTask` | WebDAV 复用 iPan 已有的 `DeleteFile`、`MoveFile`、`CopyFile` |
 | 属性、条件请求、锁 | 安装包的业务脚本和日志中未发现 DAV 入口 | 由 iPan 的 `/dav/` 实现 |
 | 搜索、回收站、文件版本 | `/wohome/pc/queryFilesByName`、`QueryRecycleData`、`/wohome/fileVersionDispatcher` | 目前无对应接口，属于 RFC 4918 之外的桌面功能 |
@@ -186,7 +190,7 @@ web/                Vue 3 前端（由 Go 直接托管构建产物）
 | POST | `/api/login/send-code` | 发送短信验证码 |
 | POST | `/api/login/verify` | 校验验证码并保存云盘令牌 |
 | POST | `/api/logout` | 清除会话 Cookie |
-| GET/POST | `/api/settings` · `/settings/show-hidden` · `/settings/password` · `/settings/webdav` | 应用设置；WebDAV 支持 GET/POST/DELETE |
+| GET/POST | `/api/settings` · `/settings/show-hidden` · `/settings/password` · `/settings/webdav` · `/settings/webdav/direct-download` | 应用设置；WebDAV 凭据支持 GET/POST/DELETE，下载直连使用 POST |
 | GET | `/api/list?parentId=&page=&pageSize=` | 列目录 |
 | POST | `/api/mkdir` · `/rename` · `/delete` · `/move` · `/copy` | 文件操作 |
 | POST | `/api/upload/init` · `/upload/part` | 浏览器分片上传 |

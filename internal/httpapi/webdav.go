@@ -261,6 +261,14 @@ func (d *davRequest) get(w http.ResponseWriter, entry *davEntry) error {
 	if err != nil {
 		return err
 	}
+	directDownload, err := d.server.store.LoadWebDAVDirectDownload()
+	if err != nil {
+		return err
+	}
+	if directDownload {
+		d.releaseRead()
+		return davRedirect(w, link)
+	}
 	upstream, err := http.NewRequestWithContext(d.request.Context(), http.MethodGet, link, nil)
 	if err != nil {
 		return davStatus(http.StatusBadGateway)

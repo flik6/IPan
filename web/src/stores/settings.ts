@@ -9,6 +9,7 @@ interface SettingsState {
   signParamConfigured: boolean;
   webdavConfigured: boolean;
   webdavUsername: string;
+  webdavDirectDownload: boolean;
   loaded: boolean;
 }
 
@@ -17,6 +18,7 @@ export const settings = reactive<SettingsState>({
   signParamConfigured: false,
   webdavConfigured: false,
   webdavUsername: "",
+  webdavDirectDownload: true,
   loaded: false,
 });
 
@@ -36,6 +38,7 @@ export function applySettings(data: Partial<AppSettingsResult>): void {
   if (data.signParamConfigured !== undefined) settings.signParamConfigured = !!data.signParamConfigured;
   if (data.webdavConfigured !== undefined) settings.webdavConfigured = !!data.webdavConfigured;
   if (data.webdavUsername !== undefined) settings.webdavUsername = data.webdavUsername;
+  if (data.webdavDirectDownload !== undefined) settings.webdavDirectDownload = !!data.webdavDirectDownload;
   settings.loaded = true;
 }
 
@@ -53,6 +56,23 @@ export async function setShowHidden(value: boolean): Promise<boolean> {
     return value;
   } catch (e) {
     settings.showHidden = prev;
+    throw e;
+  }
+}
+
+/** 切换 WebDAV 下载直连 */
+export async function setWebdavDirectDownload(value: boolean): Promise<boolean> {
+  const prev = settings.webdavDirectDownload;
+  settings.webdavDirectDownload = value;
+  try {
+    await api("/api/settings/webdav/direct-download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ directDownload: value }),
+    });
+    return value;
+  } catch (e) {
+    settings.webdavDirectDownload = prev;
     throw e;
   }
 }

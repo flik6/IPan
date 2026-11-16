@@ -7,7 +7,7 @@ import CloudAccountForm from "./CloudAccountForm.vue";
 import { auth } from "../stores/auth";
 import { theme, setThemeMode, type ThemeMode } from "../stores/theme";
 import { ui } from "../stores/ui";
-import { settings, loadSettings, setShowHidden } from "../stores/settings";
+import { settings, loadSettings, setShowHidden, setWebdavDirectDownload } from "../stores/settings";
 import { wopanUser } from "../composables/useWopanUser";
 import { api, setAuthToken } from "../api/client";
 import { passkeyEnrolled as passkeyEnrolledFn, passkeySupported as passkeySupportedFn, registerPasskey } from "../utils/passkey";
@@ -133,6 +133,7 @@ const webdavPass = ref("");
 const webdavConfirm = ref("");
 const webdavBusy = ref(false);
 const webdavDisableBusy = ref(false);
+const webdavDirectBusy = ref(false);
 const webdavUrl = computed(() => `${window.location.origin}/dav/`);
 
 function openWebdavForm(): void {
@@ -205,6 +206,19 @@ async function copyWebdavUrl(): Promise<void> {
     showToast("已复制 WebDAV 地址", "success");
   } catch {
     showToast("复制失败，请手动复制", "error");
+  }
+}
+
+async function toggleWebdavDirectDownload(value: boolean): Promise<void> {
+  if (webdavDirectBusy.value) return;
+  webdavDirectBusy.value = true;
+  try {
+    await setWebdavDirectDownload(value);
+    showToast(value ? "已开启下载直连" : "已关闭下载直连", "success");
+  } catch (e) {
+    showToast((e as Error).message, "error");
+  } finally {
+    webdavDirectBusy.value = false;
   }
 }
 
@@ -313,6 +327,19 @@ onMounted(() => void loadSettings());
           <div class="webdav-url">
             <code>{{ webdavUrl }}</code>
             <NButton size="small" @click="copyWebdavUrl">复制地址</NButton>
+          </div>
+
+          <div v-if="settings.webdavConfigured" class="setting-row webdav-direct-row">
+            <div>
+              <strong>下载直连</strong>
+              <p class="muted">文件直接走联通云盘直链，不占用服务器流量。</p>
+            </div>
+            <NSwitch
+              :value="settings.webdavDirectDownload"
+              :loading="webdavDirectBusy"
+              aria-label="下载直连"
+              @update:value="toggleWebdavDirectDownload"
+            />
           </div>
 
           <form v-if="webdavOpen" class="pwd-form webdav-form" @submit.prevent="saveWebdav">
@@ -1520,6 +1547,7 @@ onMounted(() => void loadSettings());
 }
 
 .webdav-form { margin-top: 0; }
+.webdav-direct-row { padding-top: 16px; border-top: 1px solid var(--op-rule); }
 .form-spacer { flex: 1; }
 
 @media (max-width: 640px) {

@@ -27,8 +27,15 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.AppToken != "secret" || !settings.ShowHidden {
+	if settings.AppToken != "secret" || !settings.ShowHidden || !settings.WebDAVDirectDownload {
 		t.Fatalf("设置读取不正确: %+v", settings)
+	}
+	if err := st.SaveWebDAVDirectDownload(false); err != nil {
+		t.Fatal(err)
+	}
+	settings, _ = st.LoadSettings()
+	if settings.WebDAVDirectDownload {
+		t.Fatalf("下载直连应已关闭: %+v", settings)
 	}
 	// 覆盖写
 	if err := st.SaveSetting("appToken", "next"); err != nil {

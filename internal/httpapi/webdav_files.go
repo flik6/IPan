@@ -8,6 +8,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strconv"
@@ -192,6 +193,18 @@ func davDownload(w http.ResponseWriter, request *http.Request) error {
 	default:
 		return davStatus(http.StatusBadGateway)
 	}
+}
+
+func davRedirect(w http.ResponseWriter, location string) error {
+	u, err := url.Parse(location)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return davStatus(http.StatusBadGateway)
+	}
+	w.Header().Set("Location", wopan.NormalizeRedirectURL(location))
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.WriteHeader(http.StatusTemporaryRedirect)
+	return nil
 }
 
 func (d *davRequest) writeResource(w http.ResponseWriter, entry *davEntry) error {

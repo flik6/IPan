@@ -272,11 +272,17 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	directDownload, err := s.store.LoadWebDAVDirectDownload()
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"signParamConfigured": settings.SignParam != "",
-		"showHidden":          settings.ShowHidden,
-		"webdavConfigured":    webdav.enabled(),
-		"webdavUsername":      webdav.Username,
+		"signParamConfigured":  settings.SignParam != "",
+		"showHidden":           settings.ShowHidden,
+		"webdavConfigured":     webdav.enabled(),
+		"webdavUsername":       webdav.Username,
+		"webdavDirectDownload": directDownload,
 	})
 }
 
