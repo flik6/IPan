@@ -376,6 +376,10 @@ func TestStaticAndSPAFallback(t *testing.T) {
 	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Header().Get("Content-Type"), "json") {
 		t.Fatalf("未知 API 应返回 JSON 404，得到 %d %s", rec.Code, rec.Header().Get("Content-Type"))
 	}
+	// 类似 /dava 的路径不能被 SPA 回退伪装成 WebDAV
+	if rec := do(t, h, http.MethodGet, "/dava", "", ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("非法 WebDAV 前缀应返回 404，得到 %d", rec.Code)
+	}
 	// 路径穿越
 	if rec := do(t, h, http.MethodGet, "/../go.mod", "", ""); rec.Code == http.StatusOK &&
 		strings.Contains(rec.Body.String(), "module ipan") {

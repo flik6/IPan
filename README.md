@@ -121,7 +121,8 @@ server {
 
 先绑定联通云盘账号，再进入 **设置 → WebDAV**，设置独立用户名和密码并保存，立即生效，无需重启。
 用户名不能包含冒号；关闭 WebDAV 后 `/dav/` 返回 404。凭据保存在 SQLite，不保存明文密码。
-WebDAV 客户端填写 `https://你的域名/dav/`，可使用 Basic 或 Digest 认证。HTTP 连接使用 Digest。
+WebDAV 客户端填写 `https://你的域名/dav/`，同时支持 Basic 与 Digest 认证。
+HTTP 连接也能使用 Basic，但密码会以明文传输，建议通过 HTTPS 挂载。
 rclone 的存储类型选 `webdav`，供应商选 `other`。
 在反向代理后挂载时，转发 `X-Forwarded-Proto` 与 `X-Forwarded-Host` 即可；也可将 `IPAN_PUBLIC_URL` 设为客户端使用的外部地址，确保 COPY 和 MOVE 的绝对目标地址能通过校验。 [RFC 7616](https://www.rfc-editor.org/rfc/rfc7616)
 

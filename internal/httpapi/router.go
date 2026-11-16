@@ -73,6 +73,10 @@ func (s *Server) Handler() http.Handler {
 			s.handleDAV(w, r)
 			return
 		}
+		if strings.HasPrefix(r.URL.Path, davPrefix) {
+			http.NotFound(w, r)
+			return
+		}
 		mux.ServeHTTP(w, r)
 	}))
 }

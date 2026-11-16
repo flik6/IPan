@@ -78,24 +78,19 @@ type davNonceCount struct {
 }
 
 func (s *Server) authenticateDAV(w http.ResponseWriter, r *http.Request, creds davCredentials) bool {
-	secure := s.isSecureRequest(r)
-	if secure {
-		gotUser, gotPassword, ok := r.BasicAuth()
-		supplied := fmt.Sprintf("%x", sha256.Sum256([]byte(gotUser+":"+davRealm+":"+gotPassword)))
-		if ok && gotUser == creds.Username && subtle.ConstantTimeCompare([]byte(supplied), []byte(creds.SHA256HA1)) == 1 {
-			return true
-		}
+	gotUser, gotPassword, ok := r.BasicAuth()
+	supplied := fmt.Sprintf("%x", sha256.Sum256([]byte(gotUser+":"+davRealm+":"+gotPassword)))
+	if ok && gotUser == creds.Username && subtle.ConstantTimeCompare([]byte(supplied), []byte(creds.SHA256HA1)) == 1 {
+		return true
 	}
 	now := time.Now()
 	ok, stale := s.davAuth.authenticate(r, creds, now)
 	if ok {
 		return true
 	}
-	if secure {
-		w.Header().Add("WWW-Authenticate", `Basic realm="`+davRealm+`", charset="UTF-8"`)
-	}
+	w.Header().Add("WWW-Authenticate", `Basic realm="`+davRealm+`", charset="UTF-8"`)
 	nonce := s.davAuth.nonce(now)
-	for _, algorithm := range []string{"SHA-256", "MD5"} {
+	for _, algorithm := range []string{"MD5", "SHA-256"} {
 		challenge := fmt.Sprintf(`Digest realm="%s", nonce="%s", algorithm=%s, qop="auth"`, davRealm, nonce, algorithm)
 		if stale {
 			challenge += ", stale=true"

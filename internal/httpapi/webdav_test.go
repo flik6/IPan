@@ -399,15 +399,25 @@ func TestDAVDigestOnHTTP(t *testing.T) {
 		_, _ = io.Copy(io.Discard, res.Body)
 		return res
 	}
-	unauthorized := request("PROPFIND", "/dav/", "Basic ZGF2OmRhdi10ZXN0LXBhc3N3b3Jk")
+	unauthorized := request("PROPFIND", "/dav/", "")
 	if unauthorized.StatusCode != 401 {
-		t.Fatalf("accepted Basic over HTTP: %d", unauthorized.StatusCode)
+		t.Fatalf("unauthenticated request: %d", unauthorized.StatusCode)
 	}
 	challenges := unauthorized.Header.Values("WWW-Authenticate")
-	if len(challenges) != 2 || !strings.HasPrefix(challenges[0], "Digest ") {
+	if len(challenges) != 3 || !strings.HasPrefix(challenges[0], "Basic ") {
 		t.Fatalf("unexpected HTTP challenge: %v", challenges)
 	}
-	challenge := parseDAVDigest(strings.TrimPrefix(challenges[0], "Digest "))
+	digestChallenge := ""
+	for _, value := range challenges {
+		if strings.HasPrefix(value, "Digest ") {
+			digestChallenge = value
+			break
+		}
+	}
+	if digestChallenge == "" {
+		t.Fatalf("missing Digest challenge: %v", challenges)
+	}
+	challenge := parseDAVDigest(strings.TrimPrefix(digestChallenge, "Digest "))
 	nonce, realm := challenge["nonce"], challenge["realm"]
 	authorization := func(nc string) string {
 		hash := func(s string) string { return fmt.Sprintf("%x", sha256.Sum256([]byte(s))) }
@@ -429,6 +439,10 @@ func TestDAVDigestOnHTTP(t *testing.T) {
 		if got := request("PROPFIND", "/dav/", authorization(count)).StatusCode; got != 207 {
 			t.Fatalf("out-of-order Digest request %s failed: %d", count, got)
 		}
+	}
+
+	if got := request("PROPFIND", "/dav/", "Basic ZGF2OmRhdi10ZXN0LXBhc3N3b3Jk").StatusCode; got != 207 {
+		t.Fatalf("Basic auth over HTTP: %d", got)
 	}
 
 	forwarded, err := http.NewRequest("PROPFIND", server.URL+"/dav/", nil)
