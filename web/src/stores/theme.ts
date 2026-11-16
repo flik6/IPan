@@ -19,7 +19,7 @@ function readStoredMode(): ThemeMode {
   } catch {
     // localStorage 不可用时退化为跟随系统
   }
-  return "system";
+  return "light";
 }
 
 const mediaQuery = typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
@@ -49,6 +49,11 @@ function applyToDocument(value: ResolvedTheme): void {
   root.dataset.theme = value;
   // 让浏览器原生控件（滚动条、输入框、日期选择器）跟着变色
   root.style.colorScheme = value;
+  const browserChrome = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (browserChrome) {
+    const background = getComputedStyle(document.body).backgroundColor;
+    if (background && background !== "rgba(0, 0, 0, 0)") browserChrome.content = background;
+  }
 }
 
 /** 把当前生效主题写入 DOM。切换 mode 或系统主题变化时都要调用 */

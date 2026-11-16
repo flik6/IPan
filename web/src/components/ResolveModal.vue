@@ -74,7 +74,7 @@ function onShowChange(show: boolean): void {
 
 <template>
   <NModal :show="ui.showResolve" @update:show="onShowChange">
-    <div class="resolve-box">
+    <div class="resolve-box glass-panel">
       <div class="box-head">
         <span>直链解析</span>
         <NButton size="small" @click="ui.showResolve = false">关闭</NButton>
@@ -102,9 +102,7 @@ function onShowChange(show: boolean): void {
 
 <style scoped>
 .resolve-box {
-  background: var(--gh-surface);
-  border: 1px solid var(--gh-border);
-  border-radius: 18px;
+  border-radius: var(--gh-radius-card);
   box-shadow: var(--gh-shadow-lg);
   width: min(560px, calc(100vw - 48px));
   display: flex;
@@ -145,5 +143,71 @@ function onShowChange(show: boolean): void {
 }
 .status-bar.error {
   color: var(--gh-danger);
+}
+</style>
+
+<style scoped>
+.resolve-box { width: min(620px, calc(100vw - 28px)); overflow: hidden; border: 1px solid var(--op-rule); border-radius: 12px; background: #fff; box-shadow: var(--op-shadow-lg); }
+.box-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--op-rule); color: var(--op-ink); font-size: 18px; font-weight: 600; }
+.box-body { display: grid; gap: 10px; padding: 18px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.row .n-input { flex: 1; }
+.hint { color: var(--op-ink-soft); font-size: 12px; line-height: 1.55; }
+.name-line { color: var(--op-ink); font-size: 12px; }
+.status-bar { min-height: 36px; padding: 9px 18px; border-top: 1px solid var(--op-rule); color: var(--op-ink-faint); background: #f9fafb; font-size: 12px; }
+.status-bar.ok { color: var(--op-success); }
+.status-bar.error { color: var(--op-danger); }
+@media (max-width: 520px) { .row { flex-direction: column; align-items: stretch; } .row .n-button { min-height: 42px; } }
+</style>
+
+<style scoped>
+.resolve-box {
+  width: min(660px, calc(100vw - 28px));
+  overflow: hidden;
+  border: 1px solid var(--op-rule-strong);
+  border-top: 3px solid var(--op-accent);
+  border-radius: 0;
+  background: var(--op-surface);
+  box-shadow: var(--op-shadow-lg);
+}
+
+.box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 19px;
+  border-bottom: 1px solid var(--op-rule-strong);
+  color: var(--op-ink);
+  font-family: var(--op-font-display);
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.box-body { display: grid; gap: 10px; padding: 20px 19px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.row .n-input { flex: 1; }
+.hint { padding-left: 10px; border-left: 2px solid var(--op-accent); color: var(--op-ink-soft); font-size: 11px; line-height: 1.65; }
+.name-line { color: var(--op-ink); font-family: var(--op-font-mono); font-size: 10px; }
+
+.status-bar {
+  min-height: 38px;
+  padding: 10px 19px;
+  border-top: 1px solid var(--op-rule);
+  color: var(--op-ink-faint);
+  background: var(--op-surface-muted);
+  font-family: var(--op-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.status-bar.ok { color: var(--op-success); }
+.status-bar.error { color: var(--op-danger); }
+
+@media (max-width: 520px) {
+  .row { flex-direction: column; align-items: stretch; }
+  .row .n-button { min-height: 44px; }
 }
 </style>

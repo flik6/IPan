@@ -71,7 +71,7 @@ function onShowChange(show: boolean): void {
 
 <template>
   <NModal :show="ui.showFolderPicker" @update:show="onShowChange">
-    <div class="picker-box">
+    <div class="picker-box glass-panel">
       <div class="box-head">
         <span>{{ ui.picker?.action === "copy" ? "复制到" : "移动到" }} - 选择目标文件夹</span>
         <NButton size="small" @click="ui.showFolderPicker = false">关闭</NButton>
@@ -111,9 +111,7 @@ function onShowChange(show: boolean): void {
 
 <style scoped>
 .picker-box {
-  background: var(--gh-cream-soft);
-  border: 1px solid var(--gh-border);
-  border-radius: 18px;
+  border-radius: var(--gh-radius-card);
   box-shadow: var(--gh-shadow-lg);
   width: min(560px, calc(100vw - 48px));
   max-height: 80vh;
@@ -181,4 +179,72 @@ function onShowChange(show: boolean): void {
   color: var(--gh-ink-soft);
   font-size: 12px;
 }
+</style>
+
+<style scoped>
+.picker-box { width: min(540px, calc(100vw - 28px)); max-height: min(82vh, 680px); overflow: hidden; border: 1px solid var(--op-rule); border-radius: 12px; background: #fff; box-shadow: var(--op-shadow-lg); }
+.box-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--op-rule); color: var(--op-ink); font-size: 18px; font-weight: 600; }
+.picker-path { padding: 10px 18px; border-bottom: 1px solid var(--op-rule); background: #f9fafb; }
+.picker-path :deep(.n-breadcrumb) { font-family: var(--op-font-sans); font-size: 12px; }
+.picker-actions { display: flex; justify-content: flex-end; padding: 10px 18px; border-bottom: 1px solid var(--op-rule); }
+.picker-list { max-height: min(46vh, 360px); overflow: auto; padding: 6px 10px 10px; }
+.picker-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 8px; border-radius: 8px; cursor: pointer; }
+.picker-row:hover { background: var(--db-blue-soft); box-shadow: none; }
+.picker-row svg { width: 28px; height: 28px; }
+.picker-row .name { flex: 1; min-width: 0; overflow: hidden; color: var(--op-ink); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.picker-row .muted { color: var(--op-ink-faint); font-size: 12px; }
+.picker-empty { padding: 36px 0; color: var(--op-ink-faint); font-size: 12px; text-align: center; }
+.picker-empty.error { color: var(--op-danger); }
+</style>
+
+<style scoped>
+.picker-box {
+  width: min(570px, calc(100vw - 28px));
+  max-height: min(82vh, 700px);
+  overflow: hidden;
+  border: 1px solid var(--op-rule-strong);
+  border-top: 3px solid var(--op-accent);
+  border-radius: 0;
+  background: var(--op-surface);
+  box-shadow: var(--op-shadow-lg);
+}
+
+.box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--op-rule-strong);
+  color: var(--op-ink);
+  font-family: var(--op-font-display);
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.picker-path {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--op-rule);
+  background: var(--op-surface-muted);
+}
+
+.picker-path :deep(.n-breadcrumb) { font-family: var(--op-font-mono); font-size: 9px; }
+.picker-actions { display: flex; justify-content: flex-end; padding: 10px 18px; border-bottom: 1px solid var(--op-rule); }
+.picker-list { max-height: min(48vh, 390px); overflow: auto; padding: 0 18px 12px; }
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 56px;
+  border-bottom: 1px solid var(--op-rule);
+  cursor: pointer;
+}
+
+.picker-row:hover { background: var(--op-accent-soft); box-shadow: inset 2px 0 0 var(--op-accent); }
+.picker-row .name { flex: 1; min-width: 0; overflow: hidden; color: var(--op-ink); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.picker-row .muted { color: var(--op-ink-faint); font-family: var(--op-font-mono); font-size: 9px; }
+.picker-empty { padding: 42px 0; color: var(--op-ink-faint); font-family: var(--op-font-mono); font-size: 10px; letter-spacing: 0.05em; text-align: center; text-transform: uppercase; }
+.picker-empty.error { color: var(--op-danger); }
 </style>

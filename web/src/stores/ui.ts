@@ -11,6 +11,8 @@ interface UiState {
   fileSearch: string;
   mobileNav: boolean;
   fileViewMode: "list" | "grid";
+  /** 设置页当前分类，顶栏入口可直接定位 */
+  settingsSection: "account" | "cloud" | "security" | "appearance" | "about";
   // 弹窗
   showResolve: boolean;
   showPreview: boolean;
@@ -46,6 +48,7 @@ export const ui = reactive<UiState>({
       return "list";
     }
   })(),
+  settingsSection: "account",
   showResolve: false,
   showPreview: false,
   showDetail: false,

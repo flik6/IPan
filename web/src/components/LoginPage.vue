@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { NButton, NInput, NTooltip } from "naive-ui";
+import { NButton, NInput } from "naive-ui";
 import AuthLayout from "./AuthLayout.vue";
 import Icon from "./Icon.vue";
 import { auth, gateLogin, refreshLoginStatus } from "../stores/auth";
@@ -12,10 +12,6 @@ const emit = defineEmits<{ success: [] }>();
 const password = ref("");
 const error = ref("");
 const busy = ref(false);
-
-// 说明提示：桌面端 hover 显示；触屏没有 hover，改为点击切换
-const helpOpen = ref(false);
-const canHover = window.matchMedia("(hover: hover)").matches;
 
 // Passkey 相关状态（支持性在 setup 顶层求值一次即可）
 const hasPasskeySupport = passkeySupported();
@@ -33,19 +29,21 @@ async function submit(): Promise<void> {
   }
   busy.value = true;
   auth.loginInProgress = true;
+  let keepLoginStage = false;
   try {
     await gateLogin(value);
     await refreshLoginStatus();
     // 密码登录成功：若本机未注册 Passkey，先展示注册引导
     if (hasPasskeySupport && !passkeyEnrolled()) {
       showEnroll.value = true;
+      keepLoginStage = true;
     } else {
       emit("success");
     }
   } catch (e) {
     error.value = (e as Error).message || "访问密码错误，请重试";
   } finally {
-    auth.loginInProgress = false;
+    if (!keepLoginStage) auth.loginInProgress = false;
     busy.value = false;
   }
 }
@@ -81,11 +79,13 @@ async function onEnroll(): Promise<void> {
     enrollNote.value = `注册未完成：${(e as Error).message || "请稍后在设置页重试"}（不影响本次进入）`;
   } finally {
     enrollBusy.value = false;
+    auth.loginInProgress = false;
     emit("success");
   }
 }
 
 function finishLogin(): void {
+  auth.loginInProgress = false;
   emit("success");
 }
 </script>
@@ -93,30 +93,7 @@ function finishLogin(): void {
 <template>
   <AuthLayout title="登录 iPan">
     <form v-if="!showEnroll" class="form" @submit.prevent="submit">
-      <div class="field-head">
-        <label class="field-label" for="access-password">访问密码</label>
-        <NTooltip :show="helpOpen" placement="top" :delay="0" @update:show="(v: boolean) => (helpOpen = v)">
-          <template #trigger>
-            <button
-              type="button"
-              class="help-btn"
-              aria-label="登录说明"
-              @mouseenter="canHover && (helpOpen = true)"
-              @mouseleave="canHover && (helpOpen = false)"
-              @click="helpOpen = !helpOpen"
-              @blur="helpOpen = false"
-            >
-              <Icon name="help" :size="15" />
-            </button>
-          </template>
-          <div class="help-tip">
-            <p>输入访问密码，进入你的文件空间。</p>
-            <p>访问密码在首次部署时设置，之后可在「设置 → 访问与安全」中修改。</p>
-          </div>
-        </NTooltip>
-      </div>
       <NInput
-        id="access-password"
         v-model:value="password"
         type="password"
         show-password-on="click"
@@ -140,34 +117,25 @@ function finishLogin(): void {
         登录
       </NButton>
 
-      <template v-if="hasPasskeySupport">
-        <div class="divider-row">
-          <span class="divider-line"></span>
-          <span class="divider-text">或</span>
-          <span class="divider-line"></span>
-        </div>
-        <NButton
-          size="large"
-          block
-          quaternary
-          class="passkey-btn"
-          :loading="passkeyBusy"
-          :disabled="busy"
-          @click="onPasskeyLogin"
-        >
-          使用 Passkey 登录
-        </NButton>
-      </template>
+      <button
+        v-if="hasPasskeySupport"
+        type="button"
+        class="passkey-link"
+        :disabled="busy || passkeyBusy"
+        @click="onPasskeyLogin"
+      >
+        {{ passkeyBusy ? "正在验证…" : "使用 Passkey 登录" }}
+      </button>
     </form>
 
     <div v-else class="enroll">
       <div class="enroll-title">登录成功</div>
-      <p class="enroll-desc">注册本设备的 Passkey 后，下次打开无需输入密码，指纹/刷脸一键登录。</p>
+      <p class="enroll-desc">注册 Passkey，下次可免密登录。</p>
       <NButton type="primary" size="large" block :loading="enrollBusy" class="submit" @click="onEnroll">
-        注册并启用
+        注册
       </NButton>
       <NButton size="large" block quaternary class="passkey-btn" @click="finishLogin">
-        暂不，直接进入
+        暂不
       </NButton>
       <div v-if="enrollNote" class="enroll-note">{{ enrollNote }}</div>
     </div>
@@ -286,4 +254,126 @@ function finishLogin(): void {
   line-height: 1.6;
   color: var(--gh-ink-soft);
 }
+</style>
+
+<style scoped>
+.form { display: grid; gap: 16px; margin: 0; }
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 2px; }
+.field-label { margin: 0; }
+
+.help-btn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  color: var(--op-ink-faint);
+  background: transparent;
+  cursor: help;
+}
+
+.help-btn:hover { color: var(--op-accent); }
+.help-tip p { margin: 0; font-size: 12px; line-height: 1.65; }
+.help-tip p + p { margin-top: 7px; }
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--op-danger);
+  color: var(--op-danger);
+  background: var(--op-danger-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.submit {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 4px;
+  border-radius: 0 !important;
+  font-weight: 650;
+}
+
+.divider-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0;
+}
+
+.divider-line { height: 1px; background: var(--op-rule); }
+.divider-text {
+  color: var(--op-ink-faint);
+  font-family: var(--op-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.passkey-btn {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 0 !important;
+  color: var(--op-ink) !important;
+  background: transparent !important;
+  border: 1px solid var(--op-rule-strong) !important;
+}
+
+.passkey-btn:hover { color: var(--op-accent) !important; border-color: var(--op-accent) !important; }
+.enroll { display: grid; gap: 12px; }
+.enroll-title {
+  color: var(--op-ink);
+  font-family: var(--op-font-display);
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.enroll-desc { margin: 0; color: var(--op-ink-soft); font-size: 13px; line-height: 1.7; }
+.enroll-note { margin: 0; padding: 10px 12px; border-left: 2px solid var(--op-warning); background: var(--op-warning-soft); font-size: 11px; }
+</style>
+
+<style scoped>
+.form { display: grid; gap: 15px; margin: 0; }
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 2px; }
+.field-label { margin: 0; }
+.help-btn { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; color: var(--op-ink-faint); background: transparent; cursor: help; }
+.help-btn:hover { color: var(--db-blue); background: var(--db-blue-soft); }
+.help-tip p { margin: 0; font-size: 12px; line-height: 1.6; }
+.help-tip p + p { margin-top: 6px; }
+.error { display: flex; align-items: flex-start; gap: 7px; padding: 10px 12px; border: 1px solid #fecdca; border-radius: 8px; color: var(--op-danger); background: var(--op-danger-soft); font-size: 12px; line-height: 1.5; }
+.submit { width: 100%; min-height: 44px; margin-top: 2px; border-radius: 8px !important; }
+.divider-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
+.divider-line { height: 1px; background: var(--op-rule); }
+.divider-text { color: var(--op-ink-faint); font-size: 11px; }
+.passkey-btn { width: 100%; min-height: 44px; border-radius: 8px !important; color: var(--op-ink) !important; background: #fff !important; border: 1px solid var(--op-rule-strong) !important; }
+.passkey-btn:hover { color: var(--db-blue) !important; border-color: var(--db-blue) !important; }
+.enroll { display: grid; gap: 12px; }
+.enroll-title { color: var(--op-ink); font-size: 22px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; }
+.enroll-desc { margin: 0; color: var(--op-ink-soft); font-size: 13px; line-height: 1.6; }
+.enroll-note { margin: 0; padding: 10px 12px; border: 1px solid #fedf89; border-radius: 8px; background: var(--op-warning-soft); font-size: 12px; }
+</style>
+
+<style scoped>
+.form { display: grid; gap: 12px; }
+.submit { margin-top: 0; }
+.passkey-link {
+  justify-self: center;
+  padding: 4px 2px;
+  border: 0;
+  color: var(--op-ink-soft);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.passkey-link:hover { color: var(--db-blue); }
+.passkey-link:disabled { opacity: 0.55; cursor: not-allowed; }
+.enroll { display: grid; gap: 10px; }
+.enroll-desc { margin: 0 0 4px; color: var(--op-ink-soft); font-size: 13px; }
 </style>

@@ -91,7 +91,7 @@ function close(): void {
 
 <template>
   <NModal :show="ui.showPreview" @update:show="(v: boolean) => (!v && close())">
-    <div class="preview-box">
+    <div class="preview-box glass-panel">
       <div class="preview-head">
         <span class="file-name" :title="ui.previewFile?.name">{{ ui.previewFile?.name }}</span>
         <div class="head-actions">
@@ -148,9 +148,7 @@ function close(): void {
 
 <style scoped>
 .preview-box {
-  background: var(--gh-surface);
-  border: 1px solid var(--gh-border);
-  border-radius: 18px;
+  border-radius: var(--gh-radius-card);
   box-shadow: var(--gh-shadow-lg);
   width: min(960px, calc(100vw - 48px));
   max-height: 90vh;
@@ -244,5 +242,101 @@ function close(): void {
 .muted {
   color: var(--gh-ink-soft);
   font-size: 13px;
+}
+</style>
+
+<style scoped>
+.preview-box { display: flex; flex-direction: column; width: min(1080px, calc(100vw - 32px)); height: min(86vh, 820px); overflow: hidden; border: 1px solid var(--op-rule); border-radius: 12px; background: #111827; box-shadow: var(--op-shadow-lg); }
+.preview-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex: 0 0 auto; padding: 11px 14px; border-bottom: 1px solid var(--op-rule); color: var(--op-ink); background: #fff; }
+.preview-head .file-name { min-width: 0; overflow: hidden; color: var(--op-ink); font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.head-actions { display: flex; align-items: center; gap: 7px; }
+.preview-body { position: relative; display: grid; place-items: center; flex: 1; min-height: 0; overflow: auto; padding: 20px; background: #111827; }
+.preview-body.is-media { padding: 0; }
+.preview-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.preview-body video { width: 100%; max-height: 100%; background: #000; }
+.preview-body pre { width: min(900px, 100%); min-height: 100%; margin: 0; padding: 20px; overflow: auto; color: #e5e7eb; background: #0b1017; font-family: var(--op-font-mono); font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.preview-loading, .preview-error, .preview-body > .muted { color: #cbd5e1; font-size: 13px; }
+.preview-error { max-width: 52ch; color: #fda29b; text-align: center; line-height: 1.6; }
+@media (max-width: 640px) { .preview-box { width: 100vw; height: 100dvh; border: 0; border-radius: 0; } .preview-head { padding: 9px 10px; } .preview-body { padding: 10px; } }
+</style>
+
+<style scoped>
+.preview-box {
+  display: flex;
+  flex-direction: column;
+  width: min(1120px, calc(100vw - 32px));
+  height: min(88vh, 860px);
+  overflow: hidden;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 0;
+  background: #0d0c0a;
+  box-shadow: var(--op-shadow-lg);
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  border-bottom: 1px solid #302c25;
+  color: var(--op-feature-ink);
+  background: var(--op-feature-bg);
+}
+
+.preview-head .file-name {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--op-font-display);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.head-actions { display: flex; align-items: center; gap: 7px; }
+.head-actions .n-button { --n-color: transparent !important; --n-text-color: var(--op-feature-ink) !important; --n-border: 1px solid #4b453a !important; }
+
+.preview-body {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px;
+  background: #0d0c0a;
+}
+
+.preview-body.is-media { padding: 0; }
+.preview-body img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.preview-body video { display: block; width: 100%; max-height: 100%; background: #000; }
+.preview-body pre {
+  width: min(900px, 100%);
+  min-height: 100%;
+  margin: 0;
+  padding: 22px;
+  overflow: auto;
+  color: #e7e0d2;
+  background: #12100d;
+  font-family: var(--op-font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.preview-loading,
+.preview-error { color: #bcb3a4; font-size: 12px; }
+.preview-error { max-width: 52ch; color: #f09686; text-align: center; line-height: 1.7; }
+.preview-body > .muted { color: #bcb3a4; font-size: 12px; }
+
+@media (max-width: 640px) {
+  .preview-box { width: 100vw; height: 100dvh; border: 0; }
+  .preview-head { padding: 10px 12px; }
+  .preview-head .file-name { font-size: 18px; }
+  .preview-body { padding: 10px; }
 }
 </style>

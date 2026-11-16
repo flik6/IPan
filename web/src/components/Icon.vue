@@ -18,6 +18,7 @@ const paths: Record<string, string[]> = {
   logout: ["M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4", "M10 17l5-5-5-5", "M15 12H3"],
   cloud: ["M7 18a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 17.3 8.6 4.2 4.2 0 0 1 17 18H7Z"],
   chevron: ["m9 6 6 6-6 6"],
+  "chevron-down": ["m6 9 6 6 6-6"],
   back: ["M15 18 9 12l6-6"],
   eye: ["M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z", "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"],
   download: ["M12 4v11", "m7.5 10.5 4.5 4.5 4.5-4.5", "M4 20h16"],
@@ -31,6 +32,10 @@ const paths: Record<string, string[]> = {
   user: ["M20 21a8 8 0 0 0-16 0", "M12 13a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z"],
   shield: ["M12 3 4.5 6v5.5c0 4.6 3.2 8.3 7.5 9.5 4.3-1.2 7.5-4.9 7.5-9.5V6L12 3Z"],
   link: ["M10 13a5 5 0 0 0 7.07 0l1.42-1.42a5 5 0 0 0-7.07-7.07L10.7 5.23", "M14 11a5 5 0 0 0-7.07 0L5.5 12.42a5 5 0 0 0 7.07 7.07l.72-.72"],
+  copy: ["M8 8h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V8Z", "M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"],
+  sun: ["M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"],
+  moon: ["M20.8 14.3A9 9 0 0 1 9.7 3.2a9 9 0 1 0 11.1 11.1Z"],
+  monitor: ["M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z", "M12 17v4M8 21h8"],
   check: ["m5 12 4 4L19 6"],
   warning: ["M12 3 2 21h20L12 3Z", "M12 9v5", "M12 17h.01"],
   help: [
@@ -51,7 +56,7 @@ const paths: Record<string, string[]> = {
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    stroke-width="1.8"
+    stroke-width="1.55"
     stroke-linecap="round"
     stroke-linejoin="round"
     aria-hidden="true"

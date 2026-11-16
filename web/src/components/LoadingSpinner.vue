@@ -19,7 +19,7 @@ withDefaults(defineProps<{ size?: number; label?: string }>(), { size: 24, label
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  color: var(--gh-ink-soft);
+  color: var(--op-ink-soft);
 }
 svg {
   flex: 0 0 auto;
@@ -32,11 +32,11 @@ svg {
   stroke-width: 2.6;
 }
 .ring-track {
-  stroke: var(--gh-primary-soft);
+  stroke: var(--op-rule);
 }
 /* 只画一段弧，旋转时形成流动感 */
 .ring-arc {
-  stroke: var(--gh-primary);
+  stroke: var(--op-accent);
   stroke-linecap: round;
   stroke-dasharray: 17 40;
   stroke-dashoffset: 0;

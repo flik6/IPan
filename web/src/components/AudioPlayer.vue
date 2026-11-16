@@ -104,8 +104,8 @@ void props;
   height: 38px;
   border: 0;
   border-radius: 50%;
-  background: var(--gh-gradient);
-  color: #fff;
+  background: var(--gh-action);
+  color: var(--gh-on-action);
   font-size: 14px;
   cursor: pointer;
 }
@@ -144,4 +144,38 @@ void props;
   color: var(--gh-ink-soft);
   font-variant-numeric: tabular-nums;
 }
+</style>
+
+<style scoped>
+.audio-player { width: min(520px, 100%); padding: 12px 14px; border: 1px solid #334155; border-radius: 10px; background: #1f2937; }
+.ap-toggle { width: 36px; height: 36px; border-radius: 8px; color: #fff; background: var(--db-blue); font-size: 12px; }
+.ap-toggle:hover { background: var(--db-blue-hover); }
+.ap-track { height: 4px; border-radius: 999px; background: #475467; }
+.ap-fill { border-radius: 999px; background: var(--db-blue); }
+.ap-knob { width: 10px; height: 10px; border: 2px solid #fff; border-radius: 50%; background: var(--db-blue); }
+.ap-time { color: #cbd5e1; font-size: 11px; }
+</style>
+
+<style scoped>
+.audio-player {
+  width: min(520px, 100%);
+  padding: 14px 16px;
+  border: 1px solid #37332b;
+  border-radius: 0;
+  background: #171510;
+}
+
+.ap-toggle {
+  width: 38px;
+  height: 38px;
+  border-radius: 0;
+  color: var(--op-feature-ink);
+  background: #2b2721;
+}
+
+.ap-toggle:hover { background: var(--op-accent); }
+.ap-track { height: 3px; border-radius: 0; background: #3d372e; }
+.ap-fill { border-radius: 0; background: var(--op-accent); }
+.ap-knob { width: 10px; height: 10px; border: 0; border-radius: 0; background: var(--op-accent); }
+.ap-time { color: #a59d90; font-family: var(--op-font-mono); font-size: 9px; }
 </style>

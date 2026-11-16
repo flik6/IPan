@@ -39,7 +39,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <AuthLayout title="初始化 iPan" subtitle="第一次使用需要先设置访问密码，之后用它可以随时登录。">
+  <AuthLayout title="设置访问密码" subtitle="首次使用需要设置访问密码，之后可用它登录 iPan。">
     <form class="form" @submit.prevent="submit">
       <div class="field">
         <label class="field-label" for="setup-password">访问密码</label>
@@ -128,4 +128,49 @@ async function submit(): Promise<void> {
   border-radius: 12px;
   font-weight: 600;
 }
+</style>
+
+<style scoped>
+.form { display: grid; gap: 17px; }
+.field { display: grid; gap: 7px; }
+.field-label { margin: 0; }
+
+.hint {
+  margin: 0;
+  padding: 11px 13px;
+  border-left: 2px solid var(--op-accent);
+  color: var(--op-ink-soft);
+  background: var(--op-accent-soft);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--op-danger);
+  color: var(--op-danger);
+  background: var(--op-danger-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.submit {
+  width: 100%;
+  height: 46px;
+  margin-top: 4px;
+  border-radius: 0 !important;
+  font-weight: 650;
+}
+</style>
+
+<style scoped>
+.form { display: grid; gap: 15px; }
+.field { display: grid; gap: 7px; }
+.field-label { margin: 0; }
+.hint { margin: 0; padding: 10px 12px; border: 1px solid #c7dbff; border-radius: 8px; color: var(--op-ink-soft); background: var(--db-blue-soft); font-size: 12px; line-height: 1.6; }
+.error { display: flex; align-items: flex-start; gap: 7px; padding: 10px 12px; border: 1px solid #fecdca; border-radius: 8px; color: var(--op-danger); background: var(--op-danger-soft); font-size: 12px; line-height: 1.5; }
+.submit { width: 100%; height: 44px; margin-top: 2px; border-radius: 8px !important; }
 </style>

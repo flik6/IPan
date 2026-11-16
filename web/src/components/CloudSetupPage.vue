@@ -7,8 +7,8 @@ const emit = defineEmits<{ done: []; skip: [] }>();
 
 <template>
   <AuthLayout
-    title="绑定云盘账号"
-    subtitle="还差一步：绑定手机号后即可在网页里管理文件。"
+    title="连接联通云盘"
+    subtitle="绑定手机号后，即可在 iPan 中管理云端文件。"
   >
     <CloudAccountForm mode="setup" @configured="emit('done')" />
 

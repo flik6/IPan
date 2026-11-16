@@ -1,7 +1,7 @@
 import { reactive } from "vue";
 import { api, rawApi, setAuthToken, getAuthToken, onUnauthorizedCallback, type AuthCheckResult, type LoginStatusResult, type SetupStatusResult } from "../api/client";
 import { applySettings } from "./settings";
-import { resetWopanUser } from "../composables/useWopanUser";
+import { resetWopanUser, stopWopanUserSync } from "../composables/useWopanUser";
 
 interface AuthState {
   loggedIn: boolean;
@@ -136,6 +136,13 @@ export async function refreshLoginStatus(): Promise<LoginStatusResult | null> {
 }
 
 export function logout(): void {
+  const token = getAuthToken();
+  if (token) {
+    void fetch("/api/logout", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token },
+    }).catch(() => undefined);
+  }
   setAuthToken("");
   auth.loggedIn = false;
   auth.ready = false;
@@ -143,6 +150,7 @@ export function logout(): void {
   auth.cloudConfigured = false;
   auth.cloudChecked = false;
   auth.cloud = null;
+  stopWopanUserSync();
   resetWopanUser();
 }
 

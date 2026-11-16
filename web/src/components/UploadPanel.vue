@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { NButton, NProgress } from "naive-ui";
 import { upload, togglePanel, closePanel, cancelUpload } from "../stores/upload";
 import { formatSize, formatSpeed } from "../utils/format";
+import Icon from "./Icon.vue";
 
 const STATUS_TEXT: Record<string, string> = {
   pending: "等待上传",
@@ -31,17 +32,21 @@ function taskStatus(t: { status: string; error: string; partIndex: number; total
     :class="{ uploading: upload.uploading, open: upload.panelOpen }"
     type="button"
     :title="upload.panelOpen ? '收起传输列表' : '查看传输任务'"
-    aria-label="传输任务"
+    :aria-label="upload.panelOpen ? '收起传输任务' : '查看传输任务'"
+    :aria-expanded="upload.panelOpen"
     @click="togglePanel"
   >
-    <img src="/upload.svg" alt="" />
-    <span v-if="!upload.panelOpen" class="fab-badge" :class="{ error: hasError && !upload.uploading }">{{ activeCount || "✓" }}</span>
+    <Icon name="upload" :size="23" />
+    <span v-if="!upload.panelOpen" class="fab-badge" :class="{ error: hasError && !upload.uploading }" aria-hidden="true">
+      <template v-if="activeCount">{{ activeCount }}</template>
+      <Icon v-else :name="hasError ? 'warning' : 'check'" :size="12" />
+    </span>
   </button>
 
-  <!-- 底部抽屉：固定高度，点头部开合 -->
+  <!-- 浮动传输面板 -->
   <Transition name="drawer">
-    <section v-if="upload.panelOpen" class="upload-drawer" role="dialog" aria-label="传输任务">
-      <header class="drawer-head" type="button" title="点击收起" @click="closePanel">
+    <section v-if="upload.panelOpen" class="upload-drawer glass-panel" role="dialog" aria-label="传输任务">
+      <header class="drawer-head">
         <span class="drawer-title">
           传输任务
           <em v-if="activeCount" class="head-badge">{{ activeCount }}</em>
@@ -58,9 +63,9 @@ function taskStatus(t: { status: string; error: string; partIndex: number; total
           >
             {{ upload.cancelling ? "正在放弃…" : "放弃" }}
           </NButton>
-          <span class="head-chevron" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 15 6-6 6 6" /></svg>
-          </span>
+          <button type="button" class="head-chevron" aria-label="关闭传输任务面板" @click="closePanel">
+            <Icon name="chevron-down" :size="16" />
+          </button>
         </span>
       </header>
       <div class="drawer-body">
@@ -104,24 +109,17 @@ function taskStatus(t: { status: string; error: string; partIndex: number; total
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--gh-primary);
-  box-shadow: 0 8px 24px rgba(109, 123, 245, 0.35);
+  color: var(--gh-on-action);
+  background: var(--gh-action);
+  box-shadow: var(--gh-shadow-md);
   cursor: pointer;
   overflow: visible;
-  transition:
-    transform 0.3s ease-out,
-    background 0.3s;
+  transition: filter 160ms ease;
 }
 .upload-fab:hover {
-  background: var(--gh-primary-deep);
-  transform: translateY(-2px);
+  filter: brightness(1.12);
 }
-.upload-fab img {
-  width: 26px;
-  height: 26px;
-  object-fit: contain;
-}
-.upload-fab.uploading img {
+.upload-fab.uploading > svg {
   animation: fab-pulse 1.6s ease-in-out infinite;
 }
 @keyframes fab-pulse {
@@ -141,30 +139,31 @@ function taskStatus(t: { status: string; error: string; partIndex: number; total
   height: 20px;
   padding: 0 5px;
   border-radius: 10px;
-  background: var(--gh-primary-deep);
-  color: #fff;
+  display: grid;
+  place-items: center;
+  background: var(--gh-accent);
+  color: var(--gh-on-accent);
   font-size: 11px;
   line-height: 20px;
   text-align: center;
 }
 .fab-badge.error {
-  background: var(--gh-danger);
+  background: var(--gh-danger-bg);
+  color: var(--gh-danger);
 }
 
 .upload-drawer {
   position: fixed;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  right: 22px;
+  bottom: 22px;
+  width: min(450px, calc(100% - 44px));
   z-index: 260;
   display: flex;
   flex-direction: column;
-  height: 320px;
+  height: min(360px, calc(100dvh - 44px));
   overflow: hidden;
-  border-top: 1px solid var(--gh-border);
-  border-radius: 18px 18px 0 0;
-  background: var(--gh-surface);
-  box-shadow: 0 -10px 34px rgba(38, 43, 74, 0.16);
+  border-radius: var(--gh-radius-card);
+  box-shadow: var(--gh-shadow-lg);
 }
 .drawer-enter-active,
 .drawer-leave-active {
@@ -184,12 +183,8 @@ function taskStatus(t: { status: string; error: string; partIndex: number; total
   gap: 16px;
   padding: 14px 20px;
   border-bottom: 1px solid var(--gh-border);
-  cursor: pointer;
   user-select: none;
   flex: 0 0 auto;
-}
-.drawer-head:hover {
-  background: var(--gh-surface-2);
 }
 .drawer-title {
   display: inline-flex;
@@ -204,8 +199,8 @@ function taskStatus(t: { status: string; error: string; partIndex: number; total
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--gh-gradient);
-  color: #fff;
+  background: var(--gh-action);
+  color: var(--gh-on-action);
   font-size: 11px;
   font-style: normal;
   line-height: 18px;
@@ -224,8 +219,16 @@ function taskStatus(t: { status: string; error: string; partIndex: number; total
 .head-chevron {
   display: grid;
   place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--gh-border);
+  border-radius: 8px;
+  background: var(--gh-surface);
   color: var(--gh-ink-soft);
+  cursor: pointer;
 }
+.head-chevron:hover { color: var(--gh-primary); background: var(--gh-primary-soft); }
 .drawer-body {
   flex: 1;
   min-height: 0;
@@ -287,15 +290,125 @@ function taskStatus(t: { status: string; error: string; partIndex: number; total
 @media (max-width: 760px) {
   .upload-fab {
     right: 14px;
-    bottom: 14px;
+    bottom: var(--gh-mobile-dock-clearance, 14px);
   }
   .upload-drawer {
-    height: 260px;
+    right: 14px;
+    bottom: var(--gh-mobile-dock-bottom);
+    width: calc(100% - 28px);
+    height: min(300px, calc(100dvh - 36px));
   }
   .drawer-head,
   .drawer-body {
     padding-left: 14px;
     padding-right: 14px;
   }
+}
+</style>
+
+<style scoped>
+.upload-fab { right: 22px; bottom: 22px; width: 50px; height: 50px; border-radius: 12px; color: #fff; background: var(--db-blue); box-shadow: var(--op-shadow-md); }
+.upload-fab:hover { background: var(--db-blue-hover); }
+.fab-badge { top: -5px; right: -5px; min-width: 20px; height: 20px; border-radius: 999px; color: #fff; background: var(--db-blue); font-size: 10px; }
+.fab-badge.error { color: var(--op-danger); background: var(--op-danger-soft); }
+.upload-drawer { right: 22px; bottom: 82px; width: min(420px, calc(100% - 44px)); height: min(360px, calc(100dvh - 110px)); overflow: hidden; border: 1px solid var(--op-rule); border-radius: 12px; background: #fff; box-shadow: var(--op-shadow-lg); }
+.drawer-head { padding: 13px 16px; border-bottom: 1px solid var(--op-rule); background: #fff; }
+.drawer-title { color: var(--op-ink); font-size: 16px; font-weight: 600; }
+.head-badge { min-width: 18px; height: 18px; border-radius: 999px; color: #fff; background: var(--db-blue); font-size: 10px; line-height: 18px; }
+.speed { color: var(--op-ink-faint); font-size: 11px; }
+.head-chevron { width: 32px; height: 32px; border: 0; border-radius: 8px; color: var(--op-ink-soft); background: transparent; }
+.head-chevron:hover { color: var(--db-blue); background: var(--db-blue-soft); }
+.drawer-body { padding: 0 16px 12px; }
+.empty { padding: 30px 0; color: var(--op-ink-faint); font-size: 12px; text-align: center; }
+.task-item { padding: 12px 0; border-bottom: 1px solid var(--op-rule); }
+.task-name { color: var(--op-ink); font-size: 13px; font-weight: 500; }
+.task-percent { color: var(--db-blue); font-size: 12px; font-weight: 600; }
+.task-meta { margin: 4px 0 7px; color: var(--op-ink-faint); font-size: 11px; }
+.task-item :deep(.n-progress-graph-line-rail) { background: var(--op-rule) !important; }
+.task-item :deep(.n-progress-graph-line-fill) { background: var(--db-blue) !important; }
+.task-item.done .task-status { color: var(--op-success); }
+.task-item.error .task-status, .task-item.cancelled .task-status { color: var(--op-danger); }
+@media (max-width: 760px) { .upload-fab { right: 14px; bottom: calc(var(--op-mobile-nav) + 14px + env(safe-area-inset-bottom, 0px)); } .upload-drawer { right: 10px; bottom: calc(var(--op-mobile-nav) + 18px + env(safe-area-inset-bottom, 0px)); width: calc(100% - 20px); } }
+</style>
+
+<style scoped>
+.upload-fab {
+  right: 24px;
+  bottom: 24px;
+  width: 54px;
+  height: 54px;
+  border-radius: 0;
+  color: var(--op-feature-ink);
+  background: var(--op-feature-bg);
+  box-shadow: var(--op-shadow-md);
+}
+
+.upload-fab:hover { background: var(--op-accent); }
+.upload-fab.uploading > svg { animation: fab-pulse 1.6s ease-in-out infinite; }
+
+.fab-badge {
+  top: -5px;
+  right: -5px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 0;
+  color: var(--op-on-accent);
+  background: var(--op-accent);
+  font-family: var(--op-font-mono);
+  font-size: 9px;
+}
+
+.fab-badge.error { color: var(--op-danger); background: var(--op-danger-soft); }
+
+.upload-drawer {
+  right: 24px;
+  bottom: 90px;
+  width: min(430px, calc(100% - 48px));
+  height: min(380px, calc(100dvh - 120px));
+  overflow: hidden;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 0;
+  background: var(--op-surface);
+  box-shadow: var(--op-shadow-lg);
+}
+
+.drawer-head {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--op-rule-strong);
+  background: var(--op-surface-raised);
+}
+
+.drawer-title { color: var(--op-ink); font-family: var(--op-font-display); font-size: 24px; font-weight: 500; letter-spacing: -0.03em; }
+.head-badge { min-width: 18px; height: 18px; border-radius: 0; color: var(--op-on-accent); background: var(--op-accent); font-family: var(--op-font-mono); font-size: 9px; line-height: 18px; }
+.speed { color: var(--op-ink-faint); font-family: var(--op-font-mono); font-size: 9px; }
+
+.head-chevron {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--op-rule);
+  border-radius: 0;
+  color: var(--op-ink-soft);
+  background: transparent;
+}
+
+.head-chevron:hover { color: var(--op-accent); border-color: var(--op-accent); background: transparent; }
+.drawer-body { padding: 0 18px 14px; }
+.empty { padding: 32px 0; color: var(--op-ink-faint); font-family: var(--op-font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.task-item { padding: 14px 0; border-bottom: 1px solid var(--op-rule); }
+.task-row, .task-meta { gap: 12px; }
+.task-name { color: var(--op-ink); font-size: 12px; font-weight: 650; }
+.task-percent { color: var(--op-accent); font-family: var(--op-font-mono); font-size: 10px; }
+.task-meta { margin: 5px 0 8px; color: var(--op-ink-faint); font-family: var(--op-font-mono); font-size: 9px; }
+.task-status { text-transform: uppercase; }
+
+.task-item :deep(.n-progress-graph-line-rail) { background: var(--op-rule) !important; }
+.task-item :deep(.n-progress-graph-line-fill) { background: var(--op-accent) !important; }
+.task-item.done .task-status { color: var(--op-success); }
+.task-item.error .task-status, .task-item.cancelled .task-status { color: var(--op-danger); }
+
+@media (max-width: 760px) {
+  .upload-fab { right: 14px; bottom: calc(var(--op-mobile-nav) + 14px + env(safe-area-inset-bottom, 0px)); }
+  .upload-drawer { right: 10px; bottom: calc(var(--op-mobile-nav) + 18px + env(safe-area-inset-bottom, 0px)); width: calc(100% - 20px); height: min(360px, calc(100dvh - 150px)); }
 }
 </style>

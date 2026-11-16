@@ -5,11 +5,12 @@ import { auth, checkAuth, checkSetup, refreshLoginStatus } from "./stores/auth";
 import { isDark, initTheme, watchSystemTheme } from "./stores/theme";
 import { load as loadFiles, initNavHistory, setView } from "./stores/files";
 import { ui } from "./stores/ui";
-import { refreshWopanUser, hydrateWopanUser } from "./composables/useWopanUser";
+import { refreshWopanUser, hydrateWopanUser, startWopanUserSync, stopWopanUserSync } from "./composables/useWopanUser";
 import LoginPage from "./components/LoginPage.vue";
 import SetupPage from "./components/SetupPage.vue";
 import CloudSetupPage from "./components/CloudSetupPage.vue";
 import AppTopbar from "./components/AppTopbar.vue";
+import Icon from "./components/Icon.vue";
 import LoadingLogo from "./components/LoadingLogo.vue";
 import FileTable from "./components/FileTable.vue";
 import SettingsView from "./components/SettingsView.vue";
@@ -25,23 +26,67 @@ import ResolveModal from "./components/ResolveModal.vue";
 import FolderPicker from "./components/FolderPicker.vue";
 import ProfileEditModal from "./components/ProfileEditModal.vue";
 
-const fileTableRef = ref<InstanceType<typeof FileTable> | null>(null);
 const skipSetup = ref(false);
 
-const themeOverrides: GlobalThemeOverrides = {
-  common: {
-    primaryColor: "#6D7BF5",
-    primaryColorHover: "#5E6CF3",
-    primaryColorPressed: "#4F5DE8",
-    primaryColorSuppl: "#5E6CF3",
-    infoColor: "#4DABF7",
-    successColor: "#22C55E",
-    errorColor: "#F25767",
-    warningColor: "#FFA940",
-    borderRadius: "10px",
-    fontFamily: '"Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
-  },
-};
+const themeOverrides = computed<GlobalThemeOverrides>(() => {
+  const dark = isDark.value;
+  return {
+    common: {
+      primaryColor: dark ? "#4d8dff" : "#0061ff",
+      primaryColorHover: dark ? "#76a7ff" : "#0052d9",
+      primaryColorPressed: dark ? "#94b9ff" : "#0047ba",
+      primaryColorSuppl: dark ? "#4d8dff" : "#0061ff",
+      infoColor: dark ? "#84caff" : "#175cd3",
+      successColor: dark ? "#75e0a7" : "#067647",
+      errorColor: dark ? "#fda29b" : "#d92d20",
+      warningColor: dark ? "#fec84b" : "#b54708",
+      borderRadius: "8px",
+      textColor1: dark ? "#f2f4f7" : "#111827",
+      textColor2: dark ? "#f2f4f7" : "#111827",
+      textColor3: dark ? "#98a2b3" : "#6b7280",
+      fontFamily: '"Inter", "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif',
+      bodyColor: dark ? "#0f141c" : "#f7f8fa",
+      cardColor: dark ? "#161d27" : "#ffffff",
+      modalColor: dark ? "#161d27" : "#ffffff",
+      popoverColor: dark ? "#1a222d" : "#ffffff",
+      tableColor: dark ? "#161d27" : "#ffffff",
+      inputColor: dark ? "#1a222d" : "#ffffff",
+      borderColor: dark ? "#263140" : "#e5e7eb",
+      dividerColor: dark ? "#263140" : "#e5e7eb",
+    },
+    Input: {
+      placeholderColor: dark ? "#98a2b3" : "#9ca3af",
+      color: dark ? "#1a222d" : "#ffffff",
+      border: `1px solid ${dark ? "#344054" : "#d1d5db"}`,
+    },
+    Button: {
+      borderRadiusMedium: "8px",
+      fontWeight: "500",
+      textColorPrimary: "#ffffff",
+      textColorHoverPrimary: "#ffffff",
+      textColorPressedPrimary: "#ffffff",
+      textColorFocusPrimary: "#ffffff",
+      colorPrimary: dark ? "#4d8dff" : "#0061ff",
+      colorHoverPrimary: dark ? "#76a7ff" : "#0052d9",
+      colorPressedPrimary: dark ? "#94b9ff" : "#0047ba",
+    },
+    Dropdown: {
+      color: dark ? "#1a222d" : "#ffffff",
+      borderRadius: "8px",
+      optionTextColor: dark ? "#f2f4f7" : "#111827",
+      optionTextColorHover: dark ? "#4d8dff" : "#0061ff",
+    },
+    Popover: {
+      color: dark ? "#1a222d" : "#ffffff",
+      borderRadius: "8px",
+      textColor: dark ? "#f2f4f7" : "#111827",
+    },
+    Dialog: {
+      color: dark ? "#161d27" : "#ffffff",
+      borderRadius: "12px",
+    },
+  };
+});
 
 const stage = computed<"boot" | "setup" | "login" | "cloud-setup" | "app">(() => {
   if (auth.checking) return "boot";
@@ -52,7 +97,6 @@ const stage = computed<"boot" | "setup" | "login" | "cloud-setup" | "app">(() =>
   return "app";
 });
 
-/** /s/<id> 是公开分享页，走独立分支，不参与登录态判断 */
 const isPublicShareRoute = computed(() => /^\/s\/[^/]+\/?$/.test(location.pathname));
 
 async function enterApp(): Promise<void> {
@@ -60,9 +104,8 @@ async function enterApp(): Promise<void> {
   ui.fileSearch = "";
   initNavHistory();
   if (auth.cloudConfigured) {
-    // 账号信息优先用本地缓存，只有缓存缺失时才请求接口
     hydrateWopanUser();
-    void refreshWopanUser();
+    startWopanUserSync();
     void loadFiles();
   }
 }
@@ -109,7 +152,6 @@ onMounted(async () => {
     return;
   }
   if (await checkAuth()) {
-    // checkAuth 已经拿到合并下发的登录态；只有旧版响应没带 login 时才补一次请求
     if (!auth.cloudChecked) await refreshLoginStatus();
     auth.ready = true;
     if (auth.cloudConfigured) await enterApp();
@@ -119,6 +161,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopWatchingTheme?.();
+  stopWopanUserSync();
 });
 </script>
 
@@ -126,10 +169,9 @@ onBeforeUnmount(() => {
   <NConfigProvider :theme="isDark ? darkTheme : null" :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
     <NMessageProvider>
       <NDialogProvider>
-        <!-- 公开分享页：/s/<id>，无需登录 -->
         <PublicSharePage v-if="isPublicShareRoute" />
 
-        <div v-else-if="stage === 'boot'" class="boot">
+        <div v-else-if="stage === 'boot'" class="boot-screen op-fade">
           <LoadingLogo />
         </div>
 
@@ -139,33 +181,30 @@ onBeforeUnmount(() => {
 
         <CloudSetupPage v-else-if="stage === 'cloud-setup'" @done="handleCloudSetupDone" @skip="handleSkipSetup" />
 
-        <div v-else class="shell">
-          <AppTopbar @upload="fileTableRef?.pickFiles()" />
+        <div v-else class="app-shell">
+          <a href="#workspace-main" class="skip-link">跳到主内容</a>
+          <AppTopbar />
 
-          <div class="app-body">
-            <div class="main">
-              <main class="content">
-                <template v-if="ui.view === 'settings'">
-                  <SettingsView />
-                </template>
+          <main id="workspace-main" tabindex="-1" class="app-main">
+            <div class="workspace-content">
+              <SettingsView v-if="ui.view === 'settings'" />
+              <SharesView v-else-if="ui.view === 'shares'" />
 
-                <template v-else-if="ui.view === 'shares'">
-                  <SharesView />
-                </template>
+              <div v-else-if="!auth.cloudConfigured" class="unbound-stage op-rise">
+                <div class="unbound-copy">
+                  <span class="eyebrow">云盘尚未连接</span>
+                  <h1 class="display">连接你的云盘账号</h1>
+                  <p class="display-sub">绑定联通云盘后，即可在这里浏览文件、创建分享并管理账号。</p>
+                  <button type="button" class="btn btn-primary" @click="goSettings">
+                    去设置绑定
+                    <Icon name="chevron" :size="15" />
+                  </button>
+                </div>
+              </div>
 
-                <template v-else-if="!auth.cloudConfigured">
-                  <div class="setup-empty">
-                    <div class="setup-empty-icon">☁</div>
-                    <h2>还没有绑定云盘账号</h2>
-                    <p class="muted">绑定手机号后即可管理文件。</p>
-                    <button type="button" class="primary-btn" @click="goSettings">去设置绑定</button>
-                  </div>
-                </template>
-
-                <FileTable v-else ref="fileTableRef" />
-              </main>
+              <FileTable v-else />
             </div>
-          </div>
+          </main>
 
           <UploadPanel />
           <DropOverlay />
@@ -184,79 +223,61 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.shell {
-  min-height: 100vh;
-}
-.app-body {
-  min-height: calc(100vh - 62px);
-}
-.main {
-  min-height: calc(100vh - 62px);
-  display: flex;
-  flex-direction: column;
-}
-.content {
-  flex: 1;
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 22px 22px 40px;
-}
-.boot {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.setup-empty {
-  margin: 8vh auto 0;
-  max-width: 440px;
-  text-align: center;
-  padding: 40px 28px;
-  background: var(--gh-surface);
-  border: 1px solid var(--gh-border);
-  border-radius: 18px;
-  box-shadow: var(--gh-shadow-sm);
-}
-.setup-empty-icon {
-  font-size: 30px;
-  width: 58px;
-  height: 58px;
-  margin: 0 auto 14px;
-  border-radius: 14px;
+.boot-screen {
+  min-height: 100dvh;
   display: grid;
   place-items: center;
-  background: var(--gh-primary-soft);
-  color: var(--gh-primary);
+  background: var(--op-bg);
 }
-.setup-empty h2 {
-  margin: 0 0 8px;
-  font-size: 18px;
+
+.app-shell { min-height: 100dvh; }
+
+.app-main {
+  min-height: 100dvh;
+  margin-left: var(--op-sidebar);
+  background: var(--op-bg);
 }
-.setup-empty p {
-  margin: 0 0 20px;
+
+.workspace-content {
+  width: 100%;
+  max-width: var(--op-shell);
+  margin-inline: auto;
+  padding: clamp(30px, 4.2vw, 58px) var(--op-gutter) 80px;
+}
+
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  padding: 9px 14px;
+  color: var(--op-feature-ink);
+  background: var(--op-feature-bg);
   font-size: 13px;
-  line-height: 1.7;
+  font-weight: 650;
+  transform: translateY(-180%);
 }
-.primary-btn {
-  height: 38px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--gh-gradient);
-  color: #fff;
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-  box-shadow: 0 6px 16px rgba(109, 123, 245, 0.35);
+
+.skip-link:focus { transform: none; }
+
+.unbound-stage {
+  display: flex;
+  align-items: flex-start;
+  min-height: 58vh;
+  padding-top: clamp(36px, 9vh, 92px);
 }
-.primary-btn:hover {
-  filter: brightness(1.06);
+
+.unbound-copy { max-width: 600px; }
+.unbound-copy .display { max-width: 14ch; }
+.unbound-copy .btn { margin-top: 22px; }
+
+@media (max-width: 1040px) {
+  .app-main { margin-left: 0; padding-top: 70px; }
 }
-@media (max-width: 900px) {
-  .content {
-    padding: 16px 14px 32px;
-  }
+
+@media (max-width: 760px) {
+  .workspace-content { padding-top: 24px; padding-bottom: calc(var(--gh-mobile-dock-clearance) + 34px); }
+  .app-main { padding-top: 64px; }
+  .unbound-stage { min-height: 48vh; padding-top: 24px; }
 }
 </style>

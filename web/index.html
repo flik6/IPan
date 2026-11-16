@@ -2,23 +2,24 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#6D7BF5">
+  <meta name="theme-color" content="#f7f8fa">
   <link rel="icon" type="image/svg+xml" href="/logo.svg">
   <link rel="apple-touch-icon" href="/logo.svg">
-  <title>iPan</title>
+  <title>iPan · 云盘工作台</title>
   <!-- 首屏前点亮主题，避免先渲染浅色再翻成深色 -->
   <script>
     (function () {
       try {
         var stored = localStorage.getItem("wopan.theme");
         var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        var dark = stored === "dark" || ((!stored || stored === "system") && prefersDark);
+        var dark = stored === "dark" || (stored === "system" && prefersDark);
         var root = document.documentElement;
         root.dataset.theme = dark ? "dark" : "light";
         root.style.colorScheme = dark ? "dark" : "light";
+        document.querySelector('meta[name="theme-color"]').content = dark ? "#0f141c" : "#f7f8fa";
       } catch (e) {}
     })();
   </script>

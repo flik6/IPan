@@ -85,18 +85,35 @@ export function hydrateWopanUser(): void {
   Object.assign(wopanUser, cached, { loaded: true, failed: false });
 }
 
+/** 账号信息缓存有效期：过期后静默回源，用户无需手动获取 */
+const SYNC_TTL_MS = 10 * 60 * 1000;
+/** 后台同步轮询间隔 */
+const SYNC_INTERVAL_MS = 10 * 60 * 1000;
+
+let syncTimer: ReturnType<typeof setInterval> | null = null;
+let syncInFlight = false;
+
+/** 后台同步的 visibilitychange 监听（需要能在停止时精确移除） */
+function onVisibilityChange(): void {
+  if (document.visibilityState === "visible") void refreshWopanUser();
+}
+
 /**
  * 获取官方账号信息（昵称/头像/VIP/容量）。
  *
- * 缓存优先：本地已有数据就直接用，服务端也有 SQLite 缓存兜底。
- * 只有 force=true（用户点击「获取账号信息」）才真正回源。
+ * 本地缓存优先：命中且未过期就直接用，避免首屏为空再闪烁。
+ * 过期或 force=true 时回源；失败保留旧数据，不打断界面。
  */
 export async function refreshWopanUser(options: { force?: boolean } = {}): Promise<void> {
   const force = options.force === true;
-  if (!force) {
-    if (!wopanUser.loaded) hydrateWopanUser();
-    if (wopanUser.loaded) return;
+  if (!wopanUser.loaded) hydrateWopanUser();
+  if (!force && wopanUser.loaded) {
+    const age = Date.now() - wopanUser.syncedAt;
+    // 缓存仍在有效期内直接复用，避免每次进页面都打上游
+    if (wopanUser.syncedAt > 0 && age >= 0 && age < SYNC_TTL_MS) return;
   }
+  if (syncInFlight) return;
+  syncInFlight = true;
   try {
     const d = await api<DetailResult>(force ? "/api/detail?refresh=1" : "/api/detail");
     wopanUser.nickName = d.nickName || "";
@@ -112,7 +129,32 @@ export async function refreshWopanUser(options: { force?: boolean } = {}): Promi
   } catch {
     // 未登录云盘或接口失败时保持已有数据，不做清空
     wopanUser.failed = true;
+  } finally {
+    syncInFlight = false;
   }
+}
+
+/**
+ * 启动后台账号同步：进应用时对齐一次，之后定时静默刷新。
+ *
+ * 与联通云盘客户端一致——用户不需要点按钮，资料和容量自己跟上；
+ * 页面隐藏时跳过请求，切回前台再补一次。
+ */
+export function startWopanUserSync(): void {
+  if (syncTimer) return;
+  void refreshWopanUser();
+  syncTimer = setInterval(() => {
+    if (document.visibilityState === "visible") void refreshWopanUser();
+  }, SYNC_INTERVAL_MS);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+}
+
+export function stopWopanUserSync(): void {
+  if (syncTimer) {
+    clearInterval(syncTimer);
+    syncTimer = null;
+  }
+  document.removeEventListener("visibilitychange", onVisibilityChange);
 }
 
 /** 拉取可编辑的账号资料（昵称/头像/性别/生日），供编辑弹窗使用 */

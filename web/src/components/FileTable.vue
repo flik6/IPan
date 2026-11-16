@@ -22,13 +22,15 @@ import {
   selectedItems,
   toggleSelect,
   clearSelection,
-} from "../stores/files";import { uploadFiles } from "../stores/upload";
+} from "../stores/files";
+import { uploadFiles } from "../stores/upload";
 import { showToast } from "../stores/toast";
 import { formatSize, fileTime, iconKindForFile } from "../utils/format";
 import { ui, openFolderPicker, openShareDialog } from "../stores/ui";
 import FileIcon from "./FileIcon.vue";
 import Icon from "./Icon.vue";
 import LoadingSpinner from "./LoadingSpinner.vue";
+import WorkspaceEmpty from "./WorkspaceEmpty.vue";
 
 const dialog = useDialog();
 
@@ -448,6 +450,9 @@ const ctxOptions: Array<{ key: CtxActionKey; label: string; icon: string }> = [
   { key: "upload-folder", label: "上传文件夹", icon: "folder" },
   { key: "refresh", label: "刷新", icon: "refresh" },
 ];
+const toolbarOptions = ctxOptions
+  .filter(({ key }) => key === "upload-folder" || key === "refresh")
+  .map(({ key, label }) => ({ key, label }));
 
 /** 条目右键菜单：{ file, x, y } */
 const rowCtxMenu = ref<{ file: WopanFile; x: number; y: number } | null>(null);
@@ -832,39 +837,32 @@ function setViewMode(mode: "list" | "grid"): void {
   }
 }
 
-// ---- 网格卡片 ----
-// 图标芯片背景色分类（与 FileIcon 配色对应）
-function chipClass(f: WopanFile): string {
-  const kind = iconKindForFile(f, Number(f.type) === 0);
-  if (kind === "folder") return "chip-folder";
-  if (kind === "image") return "chip-image";
-  if (kind === "video") return "chip-video";
-  if (kind === "music") return "chip-music";
-  if (kind === "archive") return "chip-archive";
-  return "chip-file";
+function fileKind(file: WopanFile) {
+  return iconKindForFile(file, Number(file.type) === 0);
 }
 
-// 卡片元信息：大小 · 时间（文件夹没有大小，只显示时间；卡片空间有限，时间只保留日期）
-function cardMeta(f: WopanFile): string {
-  const time = fileTime(f).slice(0, 10);
-  if (Number(f.type) === 0) return time;
-  return formatSize(Number(f.size || 0)) + " · " + time;
+function cardMeta(file: WopanFile): string {
+  const size = Number(file.type) === 0 ? "文件夹" : formatSize(Number(file.size || 0));
+  const date = fileTime(file).slice(0, 10);
+  return date === "-" ? size : size + " · " + date;
 }
 
-function reload(): void {
-  void load();
+function filePlateLabel(file: WopanFile): string {
+  if (Number(file.type) === 0) return "FOLDER";
+  const name = displayName(file);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toUpperCase().slice(0, 5) : "FILE";
 }
 
-defineExpose({ pickFiles, pickFolder, openMkdir, reload });
 </script>
 
 <template>
-  <section @contextmenu="onContextmenu">
+  <section class="file-workspace" aria-label="文件工作台" @contextmenu="onContextmenu">
     <!-- 右键菜单 -->
     <Teleport to="body">
       <div
         v-if="ctxMenu"
-        class="ctx-menu"
+        class="ctx-menu glass-panel"
         :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
         @contextmenu.prevent
       >
@@ -884,7 +882,7 @@ defineExpose({ pickFiles, pickFolder, openMkdir, reload });
       <!-- 条目右键菜单：与该行的「更多」下拉是同一份选项 -->
       <div
         v-if="rowCtxMenu"
-        class="ctx-menu"
+        class="ctx-menu glass-panel"
         :style="{ left: rowCtxMenu.x + 'px', top: rowCtxMenu.y + 'px' }"
         @contextmenu.prevent
       >
@@ -901,231 +899,298 @@ defineExpose({ pickFiles, pickFolder, openMkdir, reload });
         </button>
       </div>
     </Teleport>
-    <div v-if="bulkCount > 0" class="bulk-bar">
-      <span class="muted">已选择 {{ bulkCount }} 项</span>
-      <div class="bulk-actions">
-        <NButton :loading="bulkBusy === 'download'" :disabled="isBusy" @click="onBulkDownload">批量下载</NButton>
-        <NButton :disabled="isBusy" @click="shareBulk">批量分享</NButton>
-        <NButton :disabled="isBusy" @click="bulkMove">批量移动</NButton>
-        <NButton :loading="bulkBusy === 'delete'" :disabled="isBusy" type="error" secondary @click="bulkDelete">
-          批量删除
-        </NButton>
-        <NButton @click="clearSelection">取消选择</NButton>
-      </div>
-    </div>
 
-    <div class="list-meta">
-      <div class="crumbs">
-        <button
-          type="button"
-          class="crumb home"
-          :class="{ current: files.stack.length <= 1 }"
-          title="根目录"
-          :disabled="files.stack.length <= 1 || files.loading"
-          @click="goCrumb(0)"
-        >
-          <Icon name="files" :size="16" />
+    <header class="page-header file-page-head">
+      <div class="page-header-copy">
+        <h1 class="display">{{ files.stack.length > 1 ? currentDirectoryName() : "全部文件" }}</h1>
+        <p class="file-page-meta">
+          <span class="mono">{{ shownFiles.length }}{{ files.hasMore ? "+" : "" }}</span>
+          <span>个项目</span>
+          <span class="meta-dot" aria-hidden="true">·</span>
+          <span>{{ ui.fileSearch.trim() ? "当前筛选结果" : "文件夹优先 · 最近修改在前" }}</span>
+        </p>
+      </div>
+      <div class="page-header-actions">
+        <button type="button" class="btn" @click="openMkdir">
+          <Icon name="plus" :size="15" />
+          新建文件夹
         </button>
-        <template v-for="(crumb, i) in files.stack" :key="crumb.id">
-          <template v-if="i > 0">
-            <Icon name="chevron" :size="13" class="sep" />
-            <button
-              type="button"
-              class="crumb"
-              :class="{ current: i === files.stack.length - 1 }"
-              :title="crumb.name"
-              :disabled="i === files.stack.length - 1 || files.loading"
-              @click="goCrumb(i)"
-            >
-              {{ crumb.name }}
-            </button>
-          </template>
-        </template>
-      </div>
-
-      <div class="list-meta-right">
-        <span class="muted">
-          <template v-if="ui.fileSearch">{{ shownFiles.length }} 个结果（共 {{ files.files.length }} 项）</template>
-          <template v-else-if="files.hasMore">{{ files.files.length }} 个项目（继续滚动加载更多）</template>
-          <template v-else>{{ shownFiles.length }} 个项目</template>
-        </span>
-        <!-- 列表 / 网格视图切换 -->
-        <div class="view-toggle" role="group" aria-label="视图切换">
-          <button
-            class="view-btn"
-            :class="{ active: ui.fileViewMode === 'list' }"
-            title="列表视图"
-            @click="setViewMode('list')"
-          >
-            <Icon name="list" :size="16" />
-          </button>
-          <button
-            class="view-btn"
-            :class="{ active: ui.fileViewMode === 'grid' }"
-            title="网格视图"
-            @click="setViewMode('grid')"
-          >
-            <Icon name="grid" :size="16" />
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 网格视图 -->
-    <div v-if="ui.fileViewMode === 'grid'" class="grid-wrap">
-      <!-- 空态（加载中 / 无匹配 / 空目录） -->
-      <div v-if="!shownFiles.length" class="grid-empty">
-        <template v-if="files.loading">
-          <LoadingSpinner :size="30" label="正在加载…" />
-        </template>
-        <template v-else>
-          <div class="grid-empty-chip">
-            <Icon name="cloud" :size="32" />
-          </div>
-          <p class="muted">{{ ui.fileSearch ? "没有匹配的文件" : "空目录" }}</p>
-        </template>
-      </div>
-      <div
-        v-for="f in shownFiles"
-        :key="(fileIds(f).id || '') + displayName(f)"
-        class="file-card"
-        :class="{ selected: selection.checkedIds.has(fileIds(f).id) }"
-        :data-file-id="fileIds(f).id"
-        @click="onRowClick(f, $event)"
-        @touchstart="onTouchStart(f, $event)"
-        @touchend="onTouchEnd"
-        @touchmove="onTouchEnd"
-        @touchcancel="onTouchEnd"
-      >
-        <NCheckbox
-          class="card-check"
-          :checked="selection.checkedIds.has(fileIds(f).id)"
-          @update:checked="(v: boolean) => toggleSelect(fileIds(f).id, v)"
-          @click.stop
-        />
-        <NDropdown
-          trigger="click"
-          placement="bottom-end"
-          :options="dropdownOptions(f)"
-          @select="(key: string) => onRowAction(f, key)"
-        >
-          <button class="card-more" title="更多操作" aria-label="更多操作" @click.stop>
-            <Icon name="dots" :size="16" />
+        <button type="button" class="btn btn-primary" @click="pickFiles">
+          <Icon name="upload" :size="15" />
+          上传文件
+        </button>
+        <NDropdown trigger="click" placement="bottom-end" :options="toolbarOptions" @select="onCtxSelect">
+          <button type="button" class="icon-control page-more" title="更多目录操作" aria-label="更多目录操作" aria-haspopup="menu">
+            <Icon name="dots" :size="18" />
           </button>
         </NDropdown>
-        <div class="file-chip" :class="chipClass(f)">
-          <FileIcon :kind="iconKindForFile(f, Number(f.type) === 0)" />
-        </div>
-        <div v-if="renamingId === fileIds(f).id" class="file-card-name editing" @click.stop>
-          <input
-            :ref="setRenameRef"
-            v-model="renameDraft"
-            class="rename-input"
-            :disabled="renameBusy"
-            @keydown="onRenameKey(f, $event)"
-            @blur="onRenameBlur(f)"
-            @click.stop
-          />
-        </div>
-        <div v-else class="file-card-name" :title="displayName(f)">{{ displayName(f) }}</div>
-        <div class="file-card-meta">{{ cardMeta(f) }}</div>
       </div>
-      <!-- 网格视图下刷新当前目录时同样用遮罩提示 -->
-      <div v-if="files.loading && shownFiles.length" class="grid-reload-mask">
-        <LoadingSpinner :size="26" label="正在加载…" />
-      </div>
-    </div>
+    </header>
 
-    <!-- 列表视图 -->
-    <div v-else class="card-surface">
-      <!-- 刷新当前目录时列表可能仍有旧内容，用一层遮罩给出等待反馈 -->
-      <div v-if="files.loading && shownFiles.length" class="reload-mask">
-        <LoadingSpinner :size="26" label="正在加载…" />
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th class="col-check">
-              <NCheckbox :checked="allShownSelected" @update:checked="toggleAllShown" />
-            </th>
-            <th class="col-name">名称</th>
-            <th class="col-hide-mobile">大小</th>
-            <th class="col-hide-mobile">时间</th>
-            <th class="col-ops">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-if="!shownFiles.length && files.loading">
-            <tr v-for="i in skeletonRows" :key="'sk' + i" class="skeleton-row">
-              <td :colspan="emptyColspan"><span class="skeleton-bar" /></td>
-            </tr>
+    <div class="workspace-panel surface-panel" :aria-busy="files.loading">
+      <div class="panel-bar">
+        <nav class="crumbs" aria-label="目录路径">
+          <button
+            type="button"
+            class="crumb home"
+            :class="{ current: files.stack.length <= 1 }"
+            title="全部文件"
+            :disabled="files.stack.length <= 1 || files.loading"
+            @click="goCrumb(0)"
+          >
+            <Icon name="folder" :size="16" /> <span>全部文件</span>
+          </button>
+          <template v-for="(crumb, i) in files.stack" :key="crumb.id">
+            <template v-if="i > 0">
+              <Icon name="chevron" :size="13" class="sep" />
+              <button
+                type="button"
+                class="crumb"
+                :class="{ current: i === files.stack.length - 1 }"
+                :title="crumb.name"
+                :disabled="i === files.stack.length - 1 || files.loading"
+                @click="goCrumb(i)"
+              >
+                {{ crumb.name }}
+              </button>
+            </template>
           </template>
-          <tr v-else-if="!shownFiles.length">
-            <td :colspan="emptyColspan" class="muted empty-cell">
-              {{ ui.fileSearch ? "没有匹配的文件" : "空目录" }}
-            </td>
-          </tr>
-          <tr
+          <span v-if="!files.loading" class="crumb-count" role="status">
+            {{ ui.fileSearch.trim() ? shownFiles.length + " 个匹配项" : files.files.length + (files.hasMore ? "+ 项" : " 项") }}
+          </span>
+        </nav>
+
+        <div class="panel-tools">
+          <NInput
+            v-model:value="ui.fileSearch"
+            class="directory-search"
+            :input-props="{ 'aria-label': '搜索当前目录' }"
+            clearable
+            placeholder="搜索目录"
+          >
+            <template #prefix><Icon name="search" :size="17" /></template>
+          </NInput>
+          <div class="view-toggle" role="group" aria-label="视图切换">
+            <button
+              type="button"
+              class="view-btn icon-control"
+              :class="{ active: ui.fileViewMode === 'list' }"
+              title="列表视图"
+              aria-label="列表视图"
+              :aria-pressed="ui.fileViewMode === 'list'"
+              @click="setViewMode('list')"
+            >
+              <Icon name="list" :size="16" />
+            </button>
+            <button
+              type="button"
+              class="view-btn icon-control"
+              :class="{ active: ui.fileViewMode === 'grid' }"
+              title="网格视图"
+              aria-label="网格视图"
+              :aria-pressed="ui.fileViewMode === 'grid'"
+              @click="setViewMode('grid')"
+            >
+              <Icon name="grid" :size="16" />
+            </button>
+          </div>
+          <button type="button" class="icon-control panel-tool" title="新建文件夹" aria-label="新建文件夹" @click="openMkdir">
+            <Icon name="plus" :size="17" />
+          </button>
+          <button type="button" class="panel-cta" @click="pickFiles">
+            <Icon name="upload" :size="16" />上传
+          </button>
+          <NDropdown trigger="click" placement="bottom-end" :options="toolbarOptions" @select="onCtxSelect">
+            <button type="button" class="toolbar-more icon-control" title="目录操作" aria-label="目录操作" aria-haspopup="menu">
+              <Icon name="dots" :size="17" />
+            </button>
+          </NDropdown>
+        </div>
+      </div>
+
+      <div v-if="bulkCount > 0" class="workspace-bulk panel-bulk">
+        <span class="workspace-bulk-count" role="status"><Icon name="check" :size="16" /> 已选 {{ bulkCount }} 项</span>
+        <div class="workspace-bulk-actions">
+          <NButton :loading="bulkBusy === 'download'" :disabled="isBusy" @click="onBulkDownload">批量下载</NButton>
+          <NButton :disabled="isBusy" @click="shareBulk">批量分享</NButton>
+          <NButton :disabled="isBusy" @click="bulkMove">批量移动</NButton>
+          <NButton :loading="bulkBusy === 'delete'" :disabled="isBusy" type="error" secondary @click="bulkDelete">
+            批量删除
+          </NButton>
+          <NButton quaternary @click="clearSelection">取消选择</NButton>
+        </div>
+      </div>
+
+      <!-- 空态 -->
+      <WorkspaceEmpty
+        v-if="!shownFiles.length && !files.loading"
+        :icon="ui.fileSearch.trim() ? 'search' : 'folder'"
+        :title="ui.fileSearch.trim() ? '没有匹配的文件' : '这个目录还没有文件'"
+        :description="ui.fileSearch.trim() ? '换个关键词，或清除搜索后查看全部文件。' : '可以选择文件上传，也可以把文件拖到这里。'"
+      >
+        <button v-if="ui.fileSearch.trim()" type="button" class="glass-control" @click="ui.fileSearch = ''">清除搜索</button>
+        <button v-else type="button" class="glass-control" @click="pickFiles"><Icon name="upload" :size="16" />选择文件</button>
+      </WorkspaceEmpty>
+
+      <!-- 网格视图 -->
+      <div v-else-if="ui.fileViewMode === 'grid'" class="panel-body">
+        <div v-if="!shownFiles.length" class="grid-loading">
+          <LoadingSpinner :size="30" label="正在加载…" />
+        </div>
+        <div v-else class="grid-wrap">
+          <div
             v-for="f in shownFiles"
             :key="(fileIds(f).id || '') + displayName(f)"
-            class="row-clickable"
+            class="file-card"
+            :class="{ selected: selection.checkedIds.has(fileIds(f).id) }"
             :data-file-id="fileIds(f).id"
             @click="onRowClick(f, $event)"
+            @touchstart="onTouchStart(f, $event)"
+            @touchend="onTouchEnd"
+            @touchmove="onTouchEnd"
+            @touchcancel="onTouchEnd"
           >
-            <td class="col-check">
-              <NCheckbox
-                :checked="selection.checkedIds.has(fileIds(f).id)"
-                @update:checked="(v: boolean) => toggleSelect(fileIds(f).id, v)"
-                @click.stop
-              />
-            </td>
-            <td class="col-name">
-              <span class="name">
-                <FileIcon :kind="iconKindForFile(f, Number(f.type) === 0)" />
+            <NCheckbox
+              class="card-check"
+              :aria-label="'选择 ' + displayName(f)"
+              :checked="selection.checkedIds.has(fileIds(f).id)"
+              @update:checked="(v: boolean) => toggleSelect(fileIds(f).id, v)"
+              @click.stop
+            />
+            <NDropdown
+              trigger="click"
+              placement="bottom-end"
+              :options="dropdownOptions(f)"
+              @select="(key: string) => onRowAction(f, key)"
+            >
+              <button type="button" class="card-more icon-control" title="更多操作" :aria-label="'更多操作，' + displayName(f)" @click.stop>
+                <Icon name="dots" :size="16" />
+              </button>
+            </NDropdown>
+            <div class="file-cover file-glyph" :class="'chip-' + fileKind(f)">
+              <FileIcon :kind="fileKind(f)" />
+              <span class="plate-label">{{ filePlateLabel(f) }}</span>
+            </div>
+            <div class="file-card-copy">
+              <div v-if="renamingId === fileIds(f).id" class="file-card-name editing" @click.stop>
                 <input
-                  v-if="renamingId === fileIds(f).id"
                   :ref="setRenameRef"
                   v-model="renameDraft"
+                  aria-label="文件名称"
                   class="rename-input"
                   :disabled="renameBusy"
                   @keydown="onRenameKey(f, $event)"
                   @blur="onRenameBlur(f)"
                   @click.stop
                 />
-                <span
-                  v-else
-                  class="file-name"
-                  :title="displayName(f)"
-                  @touchstart="onTouchStart(f, $event)"
-                  @touchend="onTouchEnd"
-                  @touchmove="onTouchEnd"
-                  @touchcancel="onTouchEnd"
-                >
-                  {{ displayName(f) }}
-                </span>
-              </span>
-            </td>
-            <td class="col-hide-mobile">{{ Number(f.type) === 0 ? "-" : formatSize(Number(f.size || 0)) }}</td>
-            <td class="col-hide-mobile">{{ fileTime(f) }}</td>
-            <td class="col-ops">
-              <div class="actions">
-                <!-- 行内只保留一个「更多」按钮，其余操作都收进菜单 -->
-                <NDropdown
-                  trigger="click"
-                  placement="bottom-end"
-                  :options="dropdownOptions(f)"
-                  @select="(key: string) => onRowAction(f, key)"
-                >
-                  <button type="button" class="op-btn" title="更多操作" aria-label="更多操作" @click.stop>
-                    <span v-if="renamingId === fileIds(f).id" class="op-loading"><LoadingSpinner :size="14" /></span>
-                    <Icon v-else name="dots" :size="16" />
-                  </button>
-                </NDropdown>
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              <button v-else type="button" class="file-card-name file-open" :title="displayName(f)" @click.stop="onRowClick(f, $event)">
+                {{ displayName(f) }}
+              </button>
+              <div class="file-card-meta">{{ cardMeta(f) }}</div>
+            </div>
+          </div>
+        </div>
+        <!-- 网格视图下刷新当前目录时同样用遮罩提示 -->
+        <div v-if="files.loading && shownFiles.length" class="grid-reload-mask">
+          <LoadingSpinner :size="26" label="正在加载…" />
+        </div>
+      </div>
+
+      <!-- 列表视图 -->
+      <div v-else class="panel-body list-body">
+        <!-- 刷新当前目录时列表可能仍有旧内容，用一层遮罩给出等待反馈 -->
+        <div v-if="files.loading && shownFiles.length" class="reload-mask">
+          <LoadingSpinner :size="26" label="正在加载…" />
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th class="col-check">
+                <NCheckbox aria-label="选择当前列表全部文件" :checked="allShownSelected" @update:checked="toggleAllShown" />
+              </th>
+              <th class="col-name">名称</th>
+              <th class="col-hide-mobile">大小</th>
+              <th class="col-hide-mobile col-time">修改时间</th>
+              <th class="col-ops">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-if="!shownFiles.length && files.loading">
+              <tr v-for="i in skeletonRows" :key="'sk' + i" class="skeleton-row">
+                <td :colspan="emptyColspan"><span class="skeleton-bar" /></td>
+              </tr>
+            </template>
+            <tr
+              v-for="f in shownFiles"
+              :key="(fileIds(f).id || '') + displayName(f)"
+              class="row-clickable"
+              :class="{ selected: selection.checkedIds.has(fileIds(f).id) }"
+              :data-file-id="fileIds(f).id"
+              @click="onRowClick(f, $event)"
+            >
+              <td class="col-check">
+                <NCheckbox
+                  :aria-label="'选择 ' + displayName(f)"
+                  :checked="selection.checkedIds.has(fileIds(f).id)"
+                  @update:checked="(v: boolean) => toggleSelect(fileIds(f).id, v)"
+                  @click.stop
+                />
+              </td>
+              <td class="col-name">
+                <div class="name">
+                  <span class="row-glyph file-glyph" :class="'chip-' + fileKind(f)"><FileIcon :kind="fileKind(f)" /></span>
+                  <div class="name-copy">
+                    <input
+                      v-if="renamingId === fileIds(f).id"
+                      :ref="setRenameRef"
+                      v-model="renameDraft"
+                      aria-label="文件名称"
+                      class="rename-input"
+                      :disabled="renameBusy"
+                      @keydown="onRenameKey(f, $event)"
+                      @blur="onRenameBlur(f)"
+                      @click.stop
+                    />
+                    <button
+                      v-else
+                      type="button"
+                      class="file-name file-open"
+                      :title="displayName(f)"
+                      @click.stop="onRowClick(f, $event)"
+                      @touchstart="onTouchStart(f, $event)"
+                      @touchend="onTouchEnd"
+                      @touchmove="onTouchEnd"
+                      @touchcancel="onTouchEnd"
+                    >
+                      {{ displayName(f) }}
+                    </button>
+                    <small class="file-meta-mobile">{{ cardMeta(f) }}</small>
+                  </div>
+                </div>
+              </td>
+              <td class="col-hide-mobile">{{ Number(f.type) === 0 ? "-" : formatSize(Number(f.size || 0)) }}</td>
+              <td class="col-hide-mobile col-time">{{ fileTime(f) }}</td>
+              <td class="col-ops">
+                <div class="actions">
+                  <!-- 行内只保留一个「更多」按钮，其余操作都收进菜单 -->
+                  <NDropdown
+                    trigger="click"
+                    placement="bottom-end"
+                    :options="dropdownOptions(f)"
+                    @select="(key: string) => onRowAction(f, key)"
+                  >
+                    <button type="button" class="op-btn icon-control" title="更多操作" :aria-label="'更多操作，' + displayName(f)" @click.stop>
+                      <span v-if="renamingId === fileIds(f).id" class="op-loading"><LoadingSpinner :size="14" /></span>
+                      <Icon v-else name="dots" :size="16" />
+                    </button>
+                  </NDropdown>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- 滚动加载哨兵：进入视口即追加下一页 -->
@@ -1134,7 +1199,7 @@ defineExpose({ pickFiles, pickFolder, openMkdir, reload });
       <!-- 只有翻过页才提示到底，普通小目录不显示多余文字 -->
       <span
         v-else-if="files.page > 0 && !files.hasMore && !ui.fileSearch"
-        class="sentinel-text end"
+        class="sentinel-text"
       >已经到底了</span>
     </div>
 
@@ -1146,6 +1211,7 @@ defineExpose({ pickFiles, pickFolder, openMkdir, reload });
       v-model:show="mkdirVisible"
       preset="dialog"
       title="新建文件夹"
+      aria-label="新建文件夹"
       positive-text="创建"
       negative-text="取消"
       :positive-button-props="{ loading: mkdirBusy }"
@@ -1153,21 +1219,123 @@ defineExpose({ pickFiles, pickFolder, openMkdir, reload });
       :mask-closable="!mkdirBusy"
       @positive-click="confirmMkdir"
     >
-      <NInput v-model:value="mkdirNameInput" placeholder="请输入文件夹名称" @keydown.enter.prevent="confirmMkdir" />
+      <label for="new-folder-name" class="mkdir-label">文件夹名称</label>
+      <NInput
+        v-model:value="mkdirNameInput"
+        :input-props="{ id: 'new-folder-name' }"
+        placeholder="例如：项目资料"
+        @keydown.enter.prevent="confirmMkdir"
+      />
     </NModal>
   </section>
 </template>
 
 <style scoped>
-/* ---- 右键菜单 ---- */
+/* 工作台是单一容器：路径栏、工具与列表同处一张面板，避免多块浮层割裂界面 */
+.workspace-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 9px 8px 12px;
+  border-bottom: 1px solid var(--gh-row-border);
+}
+.panel-tools { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
+.panel-tool { width: 40px; height: 40px; border: 1px solid var(--gh-border); background: var(--gh-surface); }
+.panel-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--gh-radius-pill);
+  color: var(--gh-on-action);
+  background: var(--gh-action);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: filter 160ms ease, box-shadow 160ms ease;
+}
+.panel-cta:hover { filter: brightness(1.08); box-shadow: var(--gh-shadow-md); }
+.panel-bulk { margin: 10px 9px 0; }
+.panel-body { position: relative; }
+.panel-body.list-body { padding: 6px; }
+.directory-search {
+  width: clamp(172px, 23vw, 270px);
+  min-width: 0;
+  --n-height: 40px !important;
+  --n-border-radius: 13px !important;
+  --n-border: 1px solid var(--gh-border) !important;
+}
+.directory-search :deep(.n-input__prefix) { margin-right: 7px; color: var(--gh-primary); }
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.crumb-count {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--gh-primary);
+  background: var(--gh-primary-soft);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.crumb {
+  flex: 0 0 auto;
+  max-width: 220px;
+  min-height: 36px;
+  padding: 6px 9px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 10px;
+  color: var(--gh-ink-soft);
+  background: transparent;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.crumb:focus-visible { outline-offset: -2px; }
+.crumb:hover:not(:disabled) { color: var(--gh-primary); background: var(--gh-primary-soft); }
+.crumb.current { color: var(--gh-ink); background: var(--gh-surface-2); font-weight: 700; cursor: default; }
+.crumb.home { display: inline-flex; align-items: center; gap: 6px; }
+.crumb.home svg { flex: none; color: var(--gh-primary); }
+.sep { flex: none; color: var(--gh-ink-faint); }
+.view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--gh-border);
+  border-radius: 14px;
+  background: var(--gh-surface-2);
+}
+.view-btn { width: 40px; height: 36px; border-radius: 11px; }
+.view-btn.active { color: var(--gh-primary); background: var(--gh-lens); box-shadow: var(--gh-shadow-sm); }
+.toolbar-more { border-color: var(--gh-border); background: var(--gh-surface); }
+
 .ctx-menu {
   position: fixed;
   z-index: 400;
   min-width: 168px;
   padding: 5px;
-  background: var(--gh-surface);
-  border: 1px solid var(--gh-border);
-  border-radius: 12px;
+  border-radius: 15px;
   box-shadow: var(--gh-shadow-lg);
 }
 .ctx-item {
@@ -1177,490 +1345,1000 @@ defineExpose({ pickFiles, pickFolder, openMkdir, reload });
   width: 100%;
   padding: 8px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
+  color: var(--gh-ink);
   background: transparent;
-  color: var(--gh-ink);
+  font: inherit;
   font-size: 13px;
-  font-family: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
-.ctx-item:hover:not(:disabled) {
-  background: var(--gh-primary-soft);
-  color: var(--gh-primary);
-}
-.ctx-item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.bulk-bar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  background: var(--gh-primary-soft);
-  border: 1px solid var(--gh-border-hover);
-  border-radius: 12px;
-  flex-wrap: wrap;
-}
-.bulk-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-left: auto;
-  flex-wrap: wrap;
-}
-.list-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 0 2px 10px;
-  min-height: 34px;
-}
-.list-meta-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 0 0 auto;
-}
-/* ---- 面包屑 ---- */
-.crumbs {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-}
-.crumb {
-  border: 0;
-  background: none;
-  padding: 4px 6px;
-  border-radius: 6px;
-  color: var(--gh-ink-soft);
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-.crumb:hover:not(:disabled) {
-  background: var(--gh-primary-soft);
-  color: var(--gh-primary);
-}
-.crumb.current {
-  color: var(--gh-ink);
-  font-weight: 650;
-  cursor: default;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-.crumb.home {
-  display: grid;
-  place-items: center;
-  padding: 5px;
-}
-.sep {
-  color: var(--gh-ink-faint);
-  flex: 0 0 auto;
-}
-/* ---- 列表 / 网格视图切换 ---- */
-.view-toggle {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  background: var(--gh-surface-2);
-  border: 1px solid var(--gh-border);
-  border-radius: 10px;
-}
-.view-btn {
-  width: 28px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--gh-ink-soft);
-  cursor: pointer;
-  transition: background 0.15s ease-out, color 0.15s ease-out;
-}
-.view-btn:hover {
-  background: var(--gh-surface);
-  color: var(--gh-ink);
-}
-.view-btn.active {
-  background: var(--gh-primary-soft);
-  color: var(--gh-primary);
-}
-/* ---- 网格视图 ---- */
-.grid-wrap {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 14px;
-}
-.grid-reload-mask {
-  position: absolute;
-  inset: -6px;
-  z-index: 3;
-  display: grid;
-  place-items: center;
-  background: rgba(243, 244, 253, 0.72);
-  border-radius: 18px;
-  backdrop-filter: blur(1px);
-}
+.ctx-item:hover:not(:disabled) { color: var(--gh-primary); background: var(--gh-primary-soft); }
+.ctx-item:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.grid-wrap { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(173px, 1fr)); gap: 10px; padding: 10px; }
 .file-card {
   position: relative;
-  background: var(--gh-surface);
-  border: 1px solid var(--gh-border);
-  border-radius: 16px;
-  padding: 14px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--gh-row-border);
+  border-radius: 15px;
+  background: var(--gh-surface-2);
   cursor: pointer;
-  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out, border-color 0.15s ease-out,
-    background 0.15s ease-out;
+  transition: border-color 160ms ease, background 160ms ease;
 }
-.file-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--gh-shadow-md);
-  border-color: var(--gh-border-hover);
+.file-card:hover { border-color: var(--gh-border-hover); background: var(--gh-surface); }
+.file-card.selected { border-color: var(--gh-primary); background: var(--gh-selected-bg); }
+.file-cover {
+  display: flex;
+  align-items: end;
+  min-height: 81px;
+  padding: 12px;
+  border-radius: 13px;
+  background: linear-gradient(140deg, var(--gh-surface-2), var(--file-tint));
 }
-.file-card.selected {
-  border-color: var(--gh-primary);
-  background: var(--gh-selected-bg);
+.file-glyph {
+  --file-tint: var(--gh-primary-soft);
+  --file-edge: var(--gh-glint);
 }
-.file-chip {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-}
-.chip-folder {
-  background: var(--ac-orange-soft);
-}
-.chip-image {
-  background: var(--ac-blue-soft);
-}
-.chip-video {
-  background: var(--ac-red-soft);
-}
-.chip-music {
-  background: var(--ac-violet-soft);
-}
-.chip-archive {
-  background: var(--ac-green-soft);
-}
-.chip-file {
-  background: var(--gh-primary-soft);
-}
-.file-card-name {
-  margin-top: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--gh-ink);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: break-all;
-  min-height: 36px;
-}
-.file-card-meta {
-  margin-top: 4px;
-  font-size: 11.5px;
-  color: var(--gh-ink-soft);
+.chip-folder { --file-tint: var(--ac-blue-soft); }
+.chip-image { --file-tint: var(--ac-violet-soft); }
+.chip-video { --file-tint: var(--ac-red-soft); }
+.chip-music { --file-tint: var(--ac-pink-soft); }
+.chip-archive { --file-tint: var(--ac-green-soft); }
+.file-cover .file-icon { width: 36px; height: 36px; flex-basis: 36px; }
+.card-check { position: absolute; top: 20px; right: 56px; opacity: 0; }
+.file-card:hover .card-check, .file-card:focus-within .card-check, .file-card.selected .card-check { opacity: 1; }
+.card-more { position: absolute; top: 9px; right: 9px; }
+.file-card-copy { padding: 9px 6px 6px; }
+.file-card-name.file-open {
+  display: block;
+  width: 100%;
+  min-height: 32px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 卡片左上角勾选框：默认隐藏，悬停或选中时显示 */
-.file-card .card-check {
-  position: absolute;
-  left: 8px;
-  top: 8px;
-  z-index: 2;
-  opacity: 0;
-  transition: opacity 0.15s ease-out;
-}
-.file-card:hover .card-check,
-.file-card.selected .card-check {
-  opacity: 1;
-}
-/* 卡片右上角更多按钮：默认隐藏，悬停时显示 */
-.file-card .card-more {
-  position: absolute;
-  right: 6px;
-  top: 6px;
-  z-index: 2;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--gh-ink-soft);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease-out, background 0.15s ease-out, color 0.15s ease-out;
-}
-.file-card:hover .card-more {
-  opacity: 1;
-}
-.file-card .card-more:hover {
-  background: var(--gh-primary-soft);
-  color: var(--gh-primary);
-}
-/* 网格空态 */
-.grid-empty {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 56px 0;
-}
-.grid-empty-chip {
-  width: 64px;
-  height: 64px;
-  border-radius: 20px;
-  background: var(--gh-primary-soft);
-  display: grid;
-  place-items: center;
-  color: var(--gh-primary);
-}
-.card-surface {
-  position: relative;
-  background: var(--gh-surface);
-  border: 1px solid var(--gh-border);
-  border-radius: 16px;
-  box-shadow: var(--gh-shadow-sm);
+.file-card-name.editing { display: flex; align-items: center; min-height: 32px; }
+.file-card-meta, .file-meta-mobile {
+  display: block;
   overflow: hidden;
+  color: var(--gh-ink-soft);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-/* 刷新遮罩：盖住旧内容并淡出，避免目录内容「跳变」 */
-.reload-mask {
+.file-meta-mobile { display: none; }
+
+.reload-mask, .grid-reload-mask {
   position: absolute;
   inset: 0;
   z-index: 3;
   display: grid;
   place-items: center;
+  border-radius: 0 0 var(--gh-radius-card) var(--gh-radius-card);
   background: var(--gh-overlay-mask);
-  backdrop-filter: blur(1px);
 }
-.empty-cell .loading-spinner {
-  justify-content: center;
-}
-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  table-layout: fixed;
-}
+.grid-loading { display: grid; justify-items: center; padding: 44px 12px; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 thead th {
-  background: var(--gh-surface-2);
+  height: 41px;
+  padding: 0 12px;
   color: var(--gh-ink-soft);
-  font-weight: 600;
+  background: var(--gh-surface-2);
   font-size: 12px;
-  letter-spacing: 0.02em;
-  padding: 11px 16px;
-  border-bottom: 1px solid var(--gh-border);
-  text-align: left;
+  font-weight: 650;
+  text-align: start;
 }
-thead th.col-hide-mobile,
-thead th.col-ops {
-  text-align: center;
-}
+thead th:first-child { border-radius: 11px 0 0 11px; }
+thead th:last-child { border-radius: 0 11px 11px 0; }
+.col-check { width: 42px; text-align: center; }
+.col-hide-mobile { width: 106px; text-align: end; }
+.col-time { width: 175px; }
+.col-ops { width: 64px; text-align: end; }
 tbody td {
-  text-align: center;
-  padding: 0 16px;
-  /* 固定行高：时间列换行会让行高忽高忽低，这里统一为单行 48px */
-  height: 48px;
+  height: 57px;
+  padding: 5px 12px;
   border-bottom: 1px solid var(--gh-row-border);
-  font-size: 13.5px;
-  white-space: nowrap;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
 }
-tbody td.col-name {
-  text-align: left;
+tbody tr:last-child td { border-bottom: 0; }
+tbody .col-hide-mobile { color: var(--gh-ink-soft); white-space: nowrap; }
+.row-clickable { cursor: pointer; }
+.row-clickable:hover td, .row-clickable:focus-within td { background: var(--gh-surface-2); }
+.row-clickable.selected td { background: var(--gh-selected-bg); }
+.row-clickable.selected td:first-child { box-shadow: inset 3px 0 var(--gh-primary); }
+.name { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.name-copy { min-width: 0; flex: 1; }
+.row-glyph {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  height: 36px;
+  border: 1px solid var(--file-edge);
+  border-radius: 11px;
+  background: var(--file-tint);
 }
-tbody tr:hover td {
-  background: var(--gh-primary-soft);
-}
-tbody tr:last-child td {
-  border-bottom: 0;
-}
-.empty-cell {
-  padding: 48px 0 !important;
-}
-/* 加载骨架：与真实行同高，避免列表先塌再撑开 */
-.skeleton-row td {
-  height: 48px;
-}
+.row-glyph .file-icon { width: 24px; height: 24px; flex-basis: 24px; }
+.file-name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-open { padding: 3px 0; border: 0; color: var(--gh-ink); background: transparent; font: inherit; font-weight: 650; text-align: start; cursor: pointer; }
+.file-open:hover { color: var(--gh-primary); }
+.actions { display: flex; justify-content: flex-end; }
+.op-btn { width: 40px; height: 40px; }
+.op-loading { display: grid; place-items: center; }
+
+.skeleton-row td { height: 53px; }
 .skeleton-bar {
   display: block;
+  width: min(48%, 310px);
   height: 10px;
-  width: 42%;
-  margin: 0 auto;
+  margin-left: 44px;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--gh-skeleton-a) 25%, var(--gh-skeleton-b) 37%, var(--gh-skeleton-a) 63%);
   background-size: 400% 100%;
   animation: skeleton-shimmer 1.4s ease infinite;
 }
 @keyframes skeleton-shimmer {
-  0% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0 50%;
-  }
+  from { background-position: 100% 50%; }
+  to { background-position: 0 50%; }
 }
-.row-clickable {
-  cursor: pointer;
-}
-.col-name {
-  width: auto;
-}
-.col-check {
-  width: 42px;
-}
-.col-hide-mobile {
-  width: 108px;
-}
-.col-ops {
-  width: 76px;
-}
-.name {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  max-width: 100%;
-}
-.file-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-/* 行内重命名输入框：贴合文件名位置，和文本行同高 */
+.mkdir-label { display: block; margin-bottom: 6px; font-weight: 650; }
 .rename-input {
   width: 100%;
   min-width: 0;
-  height: 28px;
-  padding: 0 8px;
+  height: 32px;
+  padding: 0 7px;
   border: 1px solid var(--gh-primary);
-  border-radius: 7px;
-  background: var(--gh-surface);
+  border-radius: 8px;
   color: var(--gh-ink);
-  font-size: 13.5px;
-  font-family: inherit;
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(109, 123, 245, 0.16);
-}
-.file-card-name.editing {
-  -webkit-line-clamp: unset;
-  display: block;
-  min-height: 36px;
-}
-.op-loading {
-  display: grid;
-  place-items: center;
-}
-.muted {
-  color: var(--gh-ink-soft);
-  font-size: 12px;
-}
-.actions {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-/* 行内操作统一为图标按钮：只保留 title 作为提示，避免文字挤压文件名列 */
-.op-btn,
-.op-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--gh-border);
-  border-radius: 9px;
   background: var(--gh-surface);
-  color: var(--gh-ink-soft);
-  cursor: pointer;
-  text-decoration: none;
-  transition: background 0.15s ease-out, color 0.15s ease-out, border-color 0.15s ease-out;
+  font: inherit;
 }
-.op-btn:hover,
-.op-link:hover {
-  background: var(--gh-primary-soft);
-  color: var(--gh-primary);
-  border-color: var(--gh-border-hover);
-}
-.sentinel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 18px 0 8px;
-  min-height: 44px;
-}
-.sentinel-text {
-  font-size: 12px;
-  color: var(--gh-ink-soft);
-}
-.sentinel-text.end {
-  color: var(--gh-ink-faint);
+.sentinel { display: flex; align-items: center; justify-content: center; min-height: 36px; padding: 14px 0 6px; }
+.sentinel-text { color: var(--gh-ink-faint); font-size: 12px; }
+
+@media (pointer: coarse) {
+  .card-check { opacity: 1; }
+  .op-btn, .view-btn, .panel-tool { width: 44px; height: 44px; }
+  .crumb { min-height: 44px; }
 }
 @media (max-width: 760px) {
-  .col-hide-mobile {
-    display: none;
-  }
-  .col-ops {
-    width: 54px;
-  }
-  .col-check {
-    width: 38px;
-  }
-  thead th,
-  tbody td {
-    padding: 0 10px;
-  }
-  tbody td {
-    height: 46px;
-  }
-  .card-surface {
-    border-radius: 10px;
-  }
-  .grid-wrap {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 10px;
-  }
-  .file-card {
-    padding: 12px;
-  }
-  /* 面包屑在窄屏可横向滑动，避免挤压右侧统计与视图切换 */
-  .crumbs {
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .crumbs::-webkit-scrollbar {
-    display: none;
-  }
-  .crumb {
-    max-width: 40vw;
-  }
-  .list-meta {
-    gap: 8px;
-  }
-  .list-meta-right > .muted {
-    display: none;
-  }
+  .panel-bar { flex-wrap: wrap; gap: 8px; padding: 8px 8px 6px; }
+  .panel-tools { width: 100%; flex-wrap: wrap; }
+  .directory-search { width: 100%; flex: 1 0 100%; order: -1; }
+  .crumbs { flex-basis: 100%; }
+  .col-hide-mobile { display: none; }
+  .col-check { width: 34px; }
+  .col-ops { width: 48px; }
+  .file-meta-mobile { display: block; }
+  .panel-body.list-body { padding: 4px; }
+  thead th, tbody td { padding-inline: 6px; }
+  th.col-ops, td.col-ops { padding-inline: 2px; }
+  .grid-wrap { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; padding: 8px; }
+  .file-card { padding: 6px; }
+}
+@media (max-width: 560px) {
+  .crumb { max-width: 52vw; }
+}
+</style>
+
+<style scoped>
+.file-workspace {
+  display: block;
+  min-width: 0;
+}
+
+.file-page-head {
+  margin-bottom: 24px;
+  animation: op-rise 480ms cubic-bezier(0.22, 0.72, 0.22, 1) both;
+}
+
+.file-page-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0 0;
+  color: var(--op-ink-soft);
+  font-size: 12px;
+}
+
+.file-page-meta .mono {
+  color: var(--op-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.meta-dot { color: var(--op-accent); }
+.page-more { border-color: var(--op-rule-strong); }
+
+.workspace-panel {
+  overflow: hidden;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 0;
+  background: var(--op-surface);
+  animation: op-rise 540ms 60ms cubic-bezier(0.22, 0.72, 0.22, 1) both;
+}
+
+.panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 62px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--op-rule);
+  background: transparent;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 34px;
+  max-width: 240px;
+  padding: 5px 8px;
+  overflow: hidden;
+  border: 0;
+  color: var(--op-ink-soft);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.crumb:hover:not(:disabled) { color: var(--op-accent); background: var(--op-accent-soft); }
+.crumb.current { color: var(--op-ink); background: transparent; cursor: default; }
+.crumb.home svg { color: var(--op-accent); }
+.sep { flex: none; color: var(--op-ink-faint); }
+
+.crumb-count {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  color: var(--op-ink-soft);
+  font-family: var(--op-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.panel-tools { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
+
+.directory-search {
+  width: clamp(180px, 22vw, 260px);
+  --n-height: 38px !important;
+  --n-border: 1px solid var(--op-rule) !important;
+  --n-border-radius: 0 !important;
+  --n-color: transparent !important;
+}
+
+.directory-search :deep(.n-input-wrapper) { padding-inline: 10px; }
+.directory-search :deep(.n-input__prefix) { margin-right: 7px; color: var(--op-ink-faint); }
+
+.view-toggle {
+  display: inline-flex;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--op-rule);
+  background: transparent;
+}
+
+.view-btn {
+  width: 38px;
+  height: 36px;
+  border: 0;
+  border-radius: 0;
+  color: var(--op-ink-faint);
+  background: transparent;
+}
+
+.view-btn + .view-btn { border-left: 1px solid var(--op-rule); }
+.view-btn:hover { color: var(--op-accent); background: var(--op-accent-soft); }
+.view-btn.active { color: var(--op-feature-ink); background: var(--op-feature-bg); }
+
+.panel-bar .panel-tool,
+.panel-bar .panel-cta,
+.panel-bar .toolbar-more { display: none; }
+
+.workspace-bulk {
+  margin: 12px 14px 0;
+  border-radius: 0;
+}
+
+.workspace-bulk-actions .n-button {
+  --n-color: transparent !important;
+  --n-text-color: var(--op-feature-ink) !important;
+  --n-border: 1px solid color-mix(in srgb, var(--op-feature-ink) 34%, transparent) !important;
+}
+
+.workspace-bulk-actions .n-button:hover {
+  --n-color: color-mix(in srgb, var(--op-feature-ink) 12%, transparent) !important;
+}
+
+.panel-body { position: relative; }
+.panel-body.list-body { padding: 0; }
+
+.list-body table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.list-body thead th {
+  height: 42px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--op-rule);
+  color: var(--op-ink-faint);
+  background: var(--op-surface-muted);
+  font-family: var(--op-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.list-body thead .col-name { padding-left: 66px; }
+
+.list-body tbody { counter-reset: file-row; }
+
+.list-body tbody tr.row-clickable {
+  counter-increment: file-row;
+  height: 60px;
+  border-bottom: 1px solid var(--op-rule);
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.list-body tbody tr.row-clickable:last-child { border-bottom: 0; }
+
+.list-body tbody tr.row-clickable:hover,
+.list-body tbody tr.row-clickable.selected {
+  background: var(--op-accent-soft);
+  box-shadow: inset 2px 0 0 var(--op-accent);
+}
+
+.list-body tbody td {
+  height: 60px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--op-rule);
+  color: var(--op-ink-soft);
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.list-body tbody tr:last-child td { border-bottom: 0; }
+.list-body tbody td.col-name { padding-left: 66px; }
+.col-check { width: 42px; }
+.col-hide-mobile { width: 116px; }
+.col-time { width: 170px; }
+.col-ops { width: 52px; }
+
+.row-clickable .col-name::before {
+  content: counter(file-row, decimal-leading-zero);
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  color: var(--op-ink-faint);
+  font-family: var(--op-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  transform: translateY(-50%);
+}
+
+.row-clickable .col-name { position: relative; }
+.name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.name-copy { display: grid; min-width: 0; gap: 2px; }
+
+.row-glyph {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--op-rule);
+  background: var(--op-surface-raised);
+}
+
+.row-glyph .file-icon { width: 22px; height: 22px; flex-basis: 22px; }
+
+.file-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--op-ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-open { border: 0; background: transparent; cursor: pointer; }
+.file-open:hover { color: var(--op-accent); }
+.file-meta-mobile { display: none; color: var(--op-ink-faint); font-size: 11px; }
+
+.list-body .col-hide-mobile { font-family: var(--op-font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.actions { display: flex; justify-content: flex-end; }
+.op-btn {
+  width: 36px;
+  height: 36px;
+  color: var(--op-ink-faint);
+}
+
+.op-btn:hover { color: var(--op-accent); background: var(--op-accent-soft); }
+
+.reload-mask,
+.grid-reload-mask {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--op-surface) 78%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.skeleton-row td { height: 60px; padding: 0 18px; }
+.skeleton-bar {
+  display: block;
+  width: min(46%, 420px);
+  height: 9px;
+  background: linear-gradient(90deg, var(--gh-skeleton-a), var(--gh-skeleton-b), var(--gh-skeleton-a));
+  background-size: 200% 100%;
+  animation: file-shimmer 1.3s linear infinite;
+}
+
+@keyframes file-shimmer {
+  to { background-position: -200% 0; }
+}
+
+.grid-wrap {
+  counter-reset: file-card;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1px;
+  padding: 1px;
+  background: var(--op-rule);
+}
+
+.file-card {
+  counter-increment: file-card;
+  position: relative;
+  min-width: 0;
+  padding: 14px;
+  border: 0;
+  border-radius: 0;
+  background: var(--op-surface);
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.file-card:hover { background: var(--op-surface-raised); transform: none; }
+.file-card.selected { background: var(--op-accent-soft); box-shadow: inset 0 2px 0 var(--op-accent); }
+
+.file-card::before {
+  content: counter(file-card, decimal-leading-zero);
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 1;
+  color: var(--op-ink-faint);
+  font-family: var(--op-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.card-check { position: absolute; top: 11px; right: 48px; z-index: 2; opacity: 0; }
+.card-more { position: absolute; top: 7px; right: 7px; z-index: 2; width: 34px; height: 34px; }
+.file-card:hover .card-check,
+.file-card:focus-within .card-check,
+.file-card.selected .card-check { opacity: 1; }
+
+.file-cover {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  min-height: 108px;
+  margin: 22px 0 0;
+  padding: 18px;
+  border: 0;
+  border-radius: 0;
+  background: var(--op-surface-muted);
+}
+
+.file-cover.chip-folder { background: color-mix(in srgb, var(--op-accent) 14%, var(--op-surface-muted)); }
+.file-cover.chip-image { background: color-mix(in srgb, #5f7f7b 16%, var(--op-surface-muted)); }
+.file-cover.chip-video { background: color-mix(in srgb, #7b5d57 16%, var(--op-surface-muted)); }
+.file-cover.chip-music { background: color-mix(in srgb, #7b637b 16%, var(--op-surface-muted)); }
+.file-cover.chip-archive { background: color-mix(in srgb, #6f7b5b 16%, var(--op-surface-muted)); }
+
+.plate-label {
+  color: var(--op-ink-soft);
+  font-family: var(--op-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.file-cover .file-icon { width: 42px; height: 42px; flex-basis: 42px; }
+.file-card-copy { padding: 13px 0 2px; }
+
+.file-card-name.file-open {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--op-ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-card-name.editing .rename-input { width: 100%; }
+.file-card-meta {
+  margin-top: 5px;
+  color: var(--op-ink-faint);
+  font-family: var(--op-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.rename-input {
+  min-height: 30px;
+  padding: 3px 6px;
+  border: 1px solid var(--op-accent);
+  color: var(--op-ink);
+  background: var(--op-surface-raised);
+  font-size: 13px;
+  outline: none;
+}
+
+.ctx-menu {
+  position: fixed;
+  z-index: 400;
+  min-width: 184px;
+  padding: 4px;
+  border: 1px solid var(--op-rule-strong);
+  border-radius: 3px;
+  background: var(--op-surface-raised);
+  box-shadow: var(--op-shadow-md);
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 0;
+  color: var(--op-ink);
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctx-item:hover:not(:disabled) { color: var(--op-accent); background: var(--op-accent-soft); }
+.ctx-item:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.sentinel-text {
+  color: var(--op-ink-faint);
+  font-family: var(--op-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.grid-loading { min-height: 280px; display: grid; place-items: center; }
+
+@media (max-width: 760px) {
+  .file-page-head { margin-bottom: 18px; }
+  .file-page-meta { margin-top: 12px; }
+  .page-header-actions .btn { flex: 1; }
+  .page-more { display: none; }
+  .workspace-panel { border-inline: 0; border-right: 0; border-left: 0; }
+  .panel-bar { min-height: 0; padding: 9px 10px; flex-wrap: wrap; }
+  .crumbs { flex-basis: 100%; order: 2; }
+  .panel-tools { width: 100%; order: 1; }
+  .directory-search { flex: 1; width: auto; }
+  .list-body thead .col-name,
+  .list-body tbody td.col-name { padding-left: 48px; }
+  .row-clickable .col-name::before { left: 10px; }
+  .list-body thead th,
+  .list-body tbody td { padding-inline: 8px; }
+  .col-check { width: 34px; }
+  .col-ops { width: 44px; }
+  .row-glyph { flex-basis: 36px; width: 36px; height: 36px; }
+  .row-glyph .file-icon { width: 20px; height: 20px; flex-basis: 20px; }
+  .grid-wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .file-card { padding: 11px; }
+  .file-cover { min-height: 86px; padding: 14px; }
+  .workspace-bulk { margin: 9px 10px 0; }
+}
+
+@media (max-width: 420px) {
+  .grid-wrap { grid-template-columns: 1fr; }
+}
+</style>
+
+<style scoped>
+.file-workspace { display: block; min-width: 0; }
+
+.file-page-head {
+  align-items: flex-end;
+  margin-bottom: 18px;
+  padding-bottom: 0;
+  animation: op-rise 240ms ease-out both;
+}
+
+.file-page-head .display {
+  font-size: clamp(28px, 3.1vw, 36px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.file-page-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--op-ink-soft);
+  font-size: 13px;
+}
+
+.file-page-meta .mono { color: var(--op-ink); font-size: 13px; font-weight: 600; }
+.meta-dot { color: var(--op-ink-faint); }
+
+.page-more { border: 1px solid var(--op-rule-strong); background: #fff; }
+
+.workspace-panel {
+  overflow: hidden;
+  border: 1px solid var(--op-rule);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--op-shadow-sm);
+  animation: op-rise 300ms 40ms ease-out both;
+}
+
+.panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--op-rule);
+  background: #fff;
+}
+
+.crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; }
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 7px;
+  min-height: 34px;
+  max-width: 240px;
+  padding: 5px 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 7px;
+  color: var(--op-ink-soft);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.crumb:hover:not(:disabled) { color: var(--db-blue); background: var(--db-blue-soft); }
+.crumb.current { color: var(--op-ink); background: transparent; cursor: default; font-weight: 600; }
+.crumb.home svg { color: var(--db-blue); }
+.sep { flex: none; color: var(--op-ink-faint); }
+
+.crumb-count {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: var(--op-ink-faint);
+  font-family: var(--op-font-sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.panel-tools { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 0 1 auto; }
+
+.directory-search {
+  width: clamp(180px, 22vw, 250px);
+  --n-height: 36px !important;
+  --n-border: 1px solid var(--op-rule) !important;
+  --n-border-radius: 8px !important;
+  --n-color: var(--op-surface-muted) !important;
+}
+
+.directory-search :deep(.n-input__prefix) { color: var(--op-ink-faint); margin-right: 6px; }
+
+.view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--op-rule);
+  border-radius: 8px;
+  background: var(--op-surface-muted);
+}
+
+.view-btn {
+  width: 32px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--op-ink-soft);
+  background: transparent;
+}
+
+.view-btn + .view-btn { border-left: 0; }
+.view-btn:hover { color: var(--db-blue); background: #fff; }
+.view-btn.active { color: var(--db-blue); background: #fff; box-shadow: var(--op-shadow-sm); }
+
+.panel-bar .panel-tool,
+.panel-bar .panel-cta,
+.panel-bar .toolbar-more { display: none; }
+
+.workspace-bulk { margin: 10px 12px 0; border-radius: 8px; }
+.workspace-bulk-actions .n-button {
+  --n-color: #fff !important;
+  --n-text-color: var(--db-blue) !important;
+  --n-border: 1px solid #c7dbff !important;
+}
+
+.panel-body { position: relative; }
+.panel-body.list-body { padding: 0; }
+.list-body table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+
+.list-body thead th {
+  height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--op-rule);
+  color: var(--op-ink-faint);
+  background: #f9fafb;
+  font-family: var(--op-font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.list-body thead .col-name { padding-left: 12px; }
+.list-body tbody tr.row-clickable {
+  height: 54px;
+  border-bottom: 1px solid #f0f1f4;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.list-body tbody tr.row-clickable:last-child { border-bottom: 0; }
+.list-body tbody tr.row-clickable:hover { background: #f9fafb; box-shadow: none; }
+.list-body tbody tr.row-clickable.selected { background: var(--db-blue-soft); box-shadow: none; }
+
+.list-body tbody td {
+  height: 54px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #f0f1f4;
+  color: var(--op-ink-soft);
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.list-body tbody tr:last-child td { border-bottom: 0; }
+.list-body tbody td.col-name { padding-left: 12px; }
+.col-check { width: 40px; }
+.col-hide-mobile { width: 110px; }
+.col-time { width: 160px; }
+.col-ops { width: 48px; }
+
+.row-clickable .col-name::before { display: none; }
+.name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.name-copy { display: grid; min-width: 0; gap: 1px; }
+
+.row-glyph {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--op-rule);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.row-glyph .file-icon { width: 22px; height: 22px; flex-basis: 22px; }
+.file-name { max-width: 100%; overflow: hidden; color: var(--op-ink); font-size: 14px; font-weight: 500; line-height: 1.35; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.file-open { border: 0; background: transparent; cursor: pointer; }
+.file-open:hover { color: var(--db-blue); }
+.file-meta-mobile { display: none; color: var(--op-ink-faint); font-size: 12px; }
+.list-body .col-hide-mobile { color: var(--op-ink-soft); font-family: var(--op-font-sans); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.actions { display: flex; justify-content: flex-end; }
+.op-btn { width: 32px; height: 32px; color: var(--op-ink-faint); }
+.op-btn:hover { color: var(--db-blue); background: var(--db-blue-soft); }
+
+.reload-mask,
+.grid-reload-mask {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.76);
+  backdrop-filter: none;
+}
+
+.skeleton-row td { height: 54px; padding: 0 14px; }
+.skeleton-bar { display: block; width: min(42%, 380px); height: 8px; border-radius: 999px; background: linear-gradient(90deg, #f1f2f4, #e8eaee, #f1f2f4); background-size: 200% 100%; animation: file-shimmer 1.2s linear infinite; }
+@keyframes file-shimmer { to { background-position: -200% 0; } }
+
+.grid-wrap {
+  counter-reset: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 12px;
+  padding: 12px;
+  background: #fff;
+}
+
+.file-card {
+  counter-increment: none;
+  position: relative;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--op-rule);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.file-card:hover { border-color: #b8ccf5; background: #fff; box-shadow: var(--op-shadow-sm); transform: none; }
+.file-card.selected { border-color: var(--db-blue); background: var(--db-blue-soft); box-shadow: 0 0 0 1px var(--db-blue) inset; }
+.file-card::before { display: none; }
+.card-check { position: absolute; top: 12px; right: 44px; z-index: 2; opacity: 0; }
+.card-more { position: absolute; top: 7px; right: 7px; z-index: 2; width: 30px; height: 30px; }
+.file-card:hover .card-check,
+.file-card:focus-within .card-check,
+.file-card.selected .card-check { opacity: 1; }
+
+.file-cover {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  min-height: 104px;
+  margin: 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: #f7f8fa;
+}
+
+.file-cover.chip-folder { background: var(--db-blue-soft); }
+.file-cover.chip-image,
+.file-cover.chip-video,
+.file-cover.chip-music,
+.file-cover.chip-archive { background: #f7f8fa; }
+.file-cover .file-icon { width: 40px; height: 40px; flex-basis: 40px; }
+
+.plate-label { color: var(--op-ink-faint); font-family: var(--op-font-sans); font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: uppercase; }
+.file-card-copy { padding: 10px 2px 2px; }
+
+.file-card-name.file-open {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--op-ink);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-card-name.editing .rename-input { width: 100%; }
+.file-card-meta { margin-top: 4px; color: var(--op-ink-faint); font-family: var(--op-font-sans); font-size: 11px; letter-spacing: 0; text-transform: none; }
+
+.rename-input { min-height: 30px; padding: 3px 7px; border: 1px solid var(--db-blue); border-radius: 6px; color: var(--op-ink); background: #fff; font-size: 14px; outline: none; }
+
+.ctx-menu {
+  position: fixed;
+  z-index: 400;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--op-rule);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--op-shadow-md);
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--op-ink);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctx-item:hover:not(:disabled) { color: var(--db-blue); background: var(--db-blue-soft); }
+.ctx-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.sentinel-text { color: var(--op-ink-faint); font-family: var(--op-font-sans); font-size: 12px; letter-spacing: 0; text-transform: none; }
+.grid-loading { min-height: 260px; display: grid; place-items: center; }
+
+@media (max-width: 760px) {
+  .file-page-head { margin-bottom: 14px; }
+  .file-page-head { align-items: flex-start; }
+  .file-page-head .page-header-copy { width: 100%; margin: 0; text-align: left; }
+  .file-page-head .display { text-align: left; }
+  .file-page-meta { margin-top: 6px; }
+  .page-header-actions .btn { flex: 1; }
+  .page-more { display: none; }
+  .workspace-panel { border-right: 0; border-left: 0; border-radius: 0; }
+  .panel-bar { min-height: 0; padding: 9px 10px; flex-wrap: wrap; }
+  .crumbs { flex-basis: 100%; order: 2; }
+  .panel-tools { width: 100%; order: 1; }
+  .directory-search { flex: 1; width: auto; }
+  .list-body thead .col-name,
+  .list-body tbody td.col-name { padding-left: 8px; }
+  .list-body thead th,
+  .list-body tbody td { padding-inline: 8px; }
+  .col-check { width: 34px; }
+  .col-ops { width: 40px; }
+  .row-glyph { flex-basis: 34px; width: 34px; height: 34px; }
+  .row-glyph .file-icon { width: 20px; height: 20px; flex-basis: 20px; }
+  .file-meta-mobile { display: block; }
+  .grid-wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 10px; }
+  .file-card { padding: 8px; }
+  .file-cover { min-height: 86px; padding: 12px; }
+  .workspace-bulk { margin: 8px 10px 0; }
+}
+
+@media (max-width: 420px) {
+  .grid-wrap { grid-template-columns: 1fr; }
 }
 </style>

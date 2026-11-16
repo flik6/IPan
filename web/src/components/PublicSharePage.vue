@@ -55,7 +55,9 @@ const totalLabel = computed(() => {
 
 const expireLabel = computed(() => {
   const ts = meta.value?.expiresAt;
-  return ts ? `${new Date(ts).toLocaleString()} 失效` : "永久有效";
+  if (!ts) return "永久有效";
+  if (ts <= Date.now()) return "已失效";
+  return `有效期至 ${new Date(ts).toLocaleString("zh-CN")}`;
 });
 
 async function load(): Promise<void> {
@@ -120,7 +122,7 @@ onMounted(() => void load());
 </script>
 
 <template>
-  <AuthLayout title="分享的文件" subtitle="由 iPan 生成的分享链接">
+  <AuthLayout title="分享的文件" subtitle="验证提取码后即可查看和下载文件。" variant="share">
     <div v-if="loading" class="center">
       <LoadingSpinner :size="26" label="正在加载分享…" />
     </div>
@@ -143,7 +145,11 @@ onMounted(() => void load());
       <form v-if="!verified" class="code-form" @submit.prevent="verify">
         <label class="label" for="share-code">提取码</label>
         <NInput
-          id="share-code"
+          :input-props="{
+            id: 'share-code',
+            'aria-invalid': !!codeError,
+            'aria-describedby': codeError ? 'share-code-error' : undefined,
+          }"
           v-model:value="code"
           size="large"
           placeholder="请输入 4 位提取码"
@@ -153,7 +159,7 @@ onMounted(() => void load());
         >
           <template #prefix><Icon name="shield" :size="17" /></template>
         </NInput>
-        <div v-if="codeError" class="field-error">{{ codeError }}</div>
+        <div v-if="codeError" id="share-code-error" class="field-error" role="alert">{{ codeError }}</div>
         <NButton type="primary" size="large" block attr-type="submit" :loading="verifying" class="submit">
           验证并查看
         </NButton>
@@ -177,6 +183,7 @@ onMounted(() => void load());
               class="file-download"
               :href="downloadHref(it.fid)"
               rel="noreferrer"
+              :aria-label="'下载 ' + it.name"
               title="下载"
             >
               <Icon name="download" :size="17" />
@@ -185,11 +192,9 @@ onMounted(() => void load());
           </li>
         </ul>
 
-        <a class="download-all" :href="downloadHref()" rel="noreferrer">
-          <NButton type="primary" size="large" block>
-            <template #icon><Icon name="download" :size="17" /></template>
-            下载全部（zip 打包）
-          </NButton>
+        <a class="action-control download-all" :href="downloadHref()" rel="noreferrer">
+          <Icon name="download" :size="17" />
+          下载全部（zip 打包）
         </a>
       </template>
     </div>
@@ -214,7 +219,7 @@ onMounted(() => void load());
   border-radius: 16px;
   display: grid;
   place-items: center;
-  background: #fff0f1;
+  background: var(--gh-danger-bg);
   color: var(--gh-danger);
 }
 .error-text {
@@ -289,7 +294,7 @@ onMounted(() => void load());
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-bottom: 1px solid #eef0f9;
+  border-bottom: 1px solid var(--gh-row-border);
 }
 .file-row:last-child {
   border-bottom: 0;
@@ -310,8 +315,8 @@ onMounted(() => void load());
 .file-download {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--gh-border);
   border-radius: 9px;
   color: var(--gh-ink-soft);
@@ -321,13 +326,13 @@ onMounted(() => void load());
 .file-download:hover {
   background: var(--gh-primary-soft);
   color: var(--gh-primary);
-  border-color: #dde2fc;
+  border-color: var(--gh-border-hover);
 }
 .pack-hint {
   flex: 0 0 auto;
 }
 .download-all {
-  display: block;
+  width: 100%;
   text-decoration: none;
 }
 .muted {
@@ -339,4 +344,142 @@ onMounted(() => void load());
 .tiny {
   font-size: 11px;
 }
+</style>
+
+<style scoped>
+.center { display: grid; justify-items: center; gap: 10px; min-height: 160px; place-content: center; text-align: center; }
+.error-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; color: var(--op-danger); background: var(--op-danger-soft); }
+.error-text { margin: 0; color: var(--op-ink-soft); font-size: 13px; }
+.share-body { display: grid; gap: 20px; }
+.share-head { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--op-rule); }
+.head-icon { display: grid; place-items: center; flex: 0 0 40px; height: 40px; border: 0; border-radius: 9px; color: var(--db-blue); background: var(--db-blue-soft); }
+.head-text { display: grid; gap: 3px; min-width: 0; }
+.head-text strong { display: block; overflow-wrap: anywhere; color: var(--op-ink); font-family: var(--op-font-sans); font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; text-overflow: clip; white-space: normal; }
+.head-text .muted { color: var(--op-ink-soft); font-family: var(--op-font-sans); font-size: 12px; letter-spacing: 0; text-transform: none; }
+.code-form { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--op-rule); border-radius: 10px; background: #f9fafb; }
+.label { color: var(--op-ink); font-size: 12px; font-weight: 600; }
+.field-error { color: var(--op-danger); font-size: 12px; }
+.submit { border-radius: 8px !important; }
+.file-list { display: grid; gap: 0; margin: 0; padding: 0; border: 1px solid var(--op-rule); border-radius: 10px; overflow: hidden; list-style: none; }
+.file-row { counter-increment: none; display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 9px 12px; border-bottom: 1px solid var(--op-rule); }
+.file-row:last-child { border-bottom: 0; }
+.file-row::before { display: none; }
+.file-row .file-icon { width: 28px; height: 28px; flex-basis: 28px; }
+.file-meta { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.file-name { overflow: hidden; color: var(--op-ink); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.file-meta .small { color: var(--op-ink-faint); font-family: var(--op-font-sans); font-size: 11px; text-transform: none; }
+.file-download { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--op-rule); border-radius: 8px; color: var(--op-ink-soft); background: #fff; }
+.file-download:hover { color: var(--db-blue); border-color: var(--db-blue); background: var(--db-blue-soft); }
+.pack-hint { color: var(--op-ink-faint); font-size: 11px; }
+.download-all { width: 100%; min-height: 44px; border-radius: 8px; color: #fff; background: var(--db-blue); border-color: var(--db-blue); }
+.download-all:hover { color: #fff; background: var(--db-blue-hover); border-color: var(--db-blue-hover); }
+</style>
+
+<style scoped>
+.center { display: grid; justify-items: center; gap: 12px; min-height: 180px; place-content: center; text-align: center; }
+.error-icon { display: grid; place-items: center; width: 46px; height: 46px; color: var(--op-danger); background: var(--op-danger-soft); }
+.error-text { margin: 0; color: var(--op-ink-soft); font-size: 13px; }
+
+.share-body { display: grid; gap: 24px; }
+
+.share-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--op-rule-strong);
+}
+
+.head-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  height: 42px;
+  border: 1px solid var(--op-rule);
+  color: var(--op-accent);
+  background: var(--op-accent-soft);
+}
+
+.head-text { display: grid; gap: 4px; min-width: 0; }
+.head-text strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--op-ink);
+  font-family: var(--op-font-display);
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.head-text .muted { color: var(--op-ink-faint); font-family: var(--op-font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+.code-form { display: grid; gap: 12px; padding: 20px; border: 1px solid var(--op-rule); background: var(--op-surface-raised); }
+.label { color: var(--op-ink-soft); font-family: var(--op-font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.field-error { color: var(--op-danger); font-size: 11px; }
+.submit { border-radius: 0 !important; }
+
+.file-list {
+  counter-reset: shared-file;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--op-rule-strong);
+  list-style: none;
+}
+
+.file-row {
+  counter-increment: shared-file;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--op-rule);
+}
+
+.file-row::before {
+  content: counter(shared-file, decimal-leading-zero);
+  flex: 0 0 24px;
+  color: var(--op-ink-faint);
+  font-family: var(--op-font-mono);
+  font-size: 9px;
+}
+
+.file-row .file-icon {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  padding: 5px;
+  border: 1px solid var(--op-rule);
+  background: var(--op-surface-raised);
+}
+
+.file-meta { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.file-name { overflow: hidden; color: var(--op-ink); font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.file-meta .small { color: var(--op-ink-faint); font-family: var(--op-font-mono); font-size: 11px; text-transform: uppercase; }
+
+.file-download {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--op-rule);
+  color: var(--op-ink-soft);
+}
+
+.file-download:hover { color: var(--op-accent); border-color: var(--op-accent); background: var(--op-accent-soft); }
+.pack-hint { font-family: var(--op-font-mono); font-size: 11px; text-transform: uppercase; }
+
+.download-all {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 0;
+  color: var(--op-feature-ink);
+  background: var(--op-feature-bg);
+  border-color: var(--op-feature-bg);
+}
+
+.download-all:hover { color: var(--op-on-accent); background: var(--op-accent); border-color: var(--op-accent); }
 </style>

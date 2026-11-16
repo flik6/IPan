@@ -1,24 +1,22 @@
 <script setup lang="ts">
 import { computed, h } from "vue";
-import { NAvatar, NDropdown, NInput } from "naive-ui";
+import { NAvatar, NDropdown } from "naive-ui";
 import BrandLogo from "./BrandLogo.vue";
 import Icon from "./Icon.vue";
+import WorkspaceNav from "./WorkspaceNav.vue";
 import { auth, logout } from "../stores/auth";
 import { wopanUser } from "../composables/useWopanUser";
-import { files, resetToRoot, goUp, canGoUp, goRoot, setView } from "../stores/files";
+import { goRoot, resetToRoot, setView } from "../stores/files";
 import { ui } from "../stores/ui";
-import { maskPhone } from "../utils/format";
+import { formatSize, maskPhone } from "../utils/format";
 
-const emit = defineEmits<{ upload: [] }>();
-
-const DEFAULT_AVATAR =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#6D7BF5"/><circle cx="32" cy="25" r="11" fill="#fff"/><path d="M12 52c3-11 11-16 20-16s17 5 20 16a30 30 0 0 1-40 0z" fill="#fff"/></svg>',
-  );
-
-const avatarSrc = computed(() => (wopanUser.loaded && !wopanUser.failed && wopanUser.avatarUrl) || DEFAULT_AVATAR);
-const displayName = computed(() => wopanUser.nickName || maskPhone(wopanUser.phone) || "用户");
+const displayName = computed(() => wopanUser.nickName || maskPhone(wopanUser.phone) || "本机访问");
+const avatarSrc = computed(() => (wopanUser.loaded && !wopanUser.failed ? wopanUser.avatarUrl : ""));
+const usagePercent = computed(() =>
+  wopanUser.totalSize ? Math.min(100, Math.max(0, (wopanUser.usedSize / wopanUser.totalSize) * 100)) : 0,
+);
+const usedLabel = computed(() => (wopanUser.loaded ? formatSize(wopanUser.usedSize) : "—"));
+const totalLabel = computed(() => (wopanUser.loaded ? formatSize(wopanUser.totalSize) : "—"));
 
 const userOptions = computed(() => [
   {
@@ -27,251 +25,342 @@ const userOptions = computed(() => [
     render: () =>
       h("div", { class: "user-dropdown-head" }, [
         h("strong", displayName.value),
-        h("span", "已登录"),
+        h("span", auth.cloudConfigured ? "联通云盘已连接" : "尚未绑定云盘"),
       ]),
   },
-  { key: "d1", type: "divider" },
-  ...(auth.cloudConfigured ? [{ key: "profile", label: "账号信息" }] : []),
-  { key: "files", label: "全部文件" },
-  { key: "shares", label: "分享中心" },
+  { key: "divider", type: "divider" },
+  ...(auth.cloudConfigured ? [{ key: "profile", label: "账号资料" }] : []),
   { key: "settings", label: "设置" },
-  { key: "logout", label: "退出登录", props: { style: { color: "var(--gh-danger)" } } },
+  { key: "logout", label: "退出登录", props: { style: { color: "var(--op-danger)" } } },
 ]);
 
 function onUserSelect(key: string): void {
   if (key === "profile") {
-    ui.showProfileEdit = true;
-  } else if (key === "files") {
-    goHome();
-  } else if (key === "shares") {
-    setView("shares");
-  } else if (key === "settings") {
+    ui.settingsSection = "account";
     setView("settings");
-  } else if (key === "logout") {
+  }
+  if (key === "settings") {
+    ui.settingsSection = "appearance";
+    setView("settings");
+  }
+  if (key === "logout") {
     logout();
     resetToRoot();
     ui.view = "files";
     ui.fileSearch = "";
   }
 }
-
-function goHome(): void {
-  goRoot();
-}
 </script>
 
 <template>
-  <header class="topbar">
-    <button type="button" class="brand-btn" title="回到文件" @click="goHome">
-      <BrandLogo size="sm" />
-    </button>
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <button type="button" class="brand-button" aria-label="iPan 文件首页" @click="goRoot">
+        <BrandLogo subtitle="个人云盘" />
+      </button>
+    </div>
 
-    <button
-      v-if="canGoUp()"
-      type="button"
-      class="back-btn"
-      title="返回上一级"
-      aria-label="返回上一级"
-      @click="goUp()"
-    >
-      <Icon name="back" :size="18" />
-    </button>
+    <div class="sidebar-label">工作区</div>
+    <WorkspaceNav />
 
-    <span class="divider" />
+    <div class="sidebar-spacer" />
 
-    <span v-if="ui.view === 'settings'" class="page-title">设置</span>
-    <span v-else-if="ui.view === 'shares'" class="page-title">分享中心</span>
-    <span v-else class="page-title">{{ files.stack[files.stack.length - 1]?.name || "全部文件" }}</span>
+    <section v-if="auth.cloudConfigured" class="storage-card" aria-label="存储空间">
+      <div class="storage-head">
+        <span>存储空间</span>
+        <span class="storage-percent">{{ Math.round(usagePercent) }}%</span>
+      </div>
+      <div class="storage-value">
+        <strong>{{ usedLabel }}</strong>
+        <span>/ {{ totalLabel }}</span>
+      </div>
+      <div class="storage-track" aria-hidden="true">
+        <span :style="{ width: usagePercent + '%' }" />
+      </div>
+      <div class="storage-foot">
+        <span>{{ auth.cloud?.enabled ? "自动同步已开启" : "自动同步已关闭" }}</span>
+        <button type="button" class="storage-link" @click="ui.settingsSection = 'cloud'; setView('settings')">
+          管理
+        </button>
+      </div>
+    </section>
 
-    <div class="tools">
-      <NInput
-        v-if="ui.view === 'files'"
-        v-model:value="ui.fileSearch"
-        class="search"
-        size="small"
-        clearable
-        placeholder="搜索当前目录"
-      >
-        <template #prefix><Icon name="search" :size="15" /></template>
-      </NInput>
-
+    <div class="sidebar-actions">
       <button
-        v-if="ui.view === 'files' && auth.cloudConfigured"
+        v-if="auth.cloudConfigured"
         type="button"
-        class="tool primary"
-        title="上传文件"
-        @click="emit('upload')"
+        class="sidebar-action"
+        aria-label="解析分享链接"
+        @click="ui.showResolve = true"
       >
-        <Icon name="upload" :size="17" /><span>上传</span>
+        <Icon name="link" :size="18" />
+        <span>链接解析</span>
       </button>
 
-      <NDropdown :options="userOptions" trigger="click" placement="bottom-end" @select="onUserSelect">
-        <button type="button" class="avatar-btn" :title="displayName">
-          <NAvatar :src="avatarSrc" round :size="32" />
+      <NDropdown :options="userOptions" trigger="click" placement="top-start" @select="onUserSelect">
+        <button type="button" class="account-button" :aria-label="'账号菜单，' + displayName" aria-haspopup="menu">
+          <NAvatar :src="avatarSrc || undefined" :size="32" class="account-avatar">
+            {{ (displayName || "iP").slice(0, 1) }}
+          </NAvatar>
+          <span class="account-copy">
+            <strong>{{ displayName }}</strong>
+            <small>{{ auth.cloudConfigured ? maskPhone(wopanUser.phone) || "云盘已连接" : "尚未绑定云盘" }}</small>
+          </span>
+          <Icon name="chevron-down" :size="14" class="account-chevron" />
         </button>
       </NDropdown>
     </div>
-  </header>
+  </aside>
 </template>
 
 <style scoped>
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
+.sidebar {
+  position: fixed;
+  z-index: 30;
+  inset: 0 auto 0 0;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 62px;
-  padding: 0 20px;
-  background: var(--gh-surface-blur);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--gh-border);
+  flex-direction: column;
+  width: var(--op-sidebar);
+  padding: 18px 14px 14px;
+  border-right: 1px solid var(--op-rule);
+  background: #ffffff;
 }
-.brand-btn {
+
+.brand-button {
+  min-height: 44px;
+  padding: 0 6px;
   border: 0;
-  background: none;
-  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
+}
+
+.brand-button:hover { background: var(--op-surface-muted); }
+
+.sidebar-label {
+  margin: 20px 0 8px;
+  padding: 0 11px;
+  color: var(--op-ink-faint);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sidebar-spacer { flex: 1; min-height: 24px; }
+
+.storage-card {
+  padding: 13px;
+  border: 1px solid var(--op-rule);
+  border-radius: 10px;
+  background: var(--op-surface-muted);
+}
+
+.storage-head,
+.storage-foot {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
-.brand-btn:hover {
-  opacity: 0.82;
+
+.storage-head {
+  color: var(--op-ink);
+  font-size: 13px;
+  font-weight: 600;
 }
-.back-btn {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
+
+.storage-percent {
+  color: var(--db-blue);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.storage-value {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.storage-value strong {
+  color: var(--op-ink);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.storage-value span { color: var(--op-ink-soft); font-size: 11px; }
+
+.storage-track {
+  height: 4px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dfe3e8;
+}
+
+.storage-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--db-blue);
+  transition: width 500ms ease;
+}
+
+.storage-foot {
+  margin-top: 8px;
+  color: var(--op-ink-faint);
+  font-size: 11px;
+}
+
+.storage-link {
   padding: 0;
-  border: 1px solid var(--gh-border);
-  border-radius: 10px;
-  background: var(--gh-surface);
-  color: var(--gh-ink);
+  border: 0;
+  color: var(--db-blue);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
 }
-.back-btn:hover {
-  background: var(--gh-primary-soft);
-  color: var(--gh-primary);
-  border-color: var(--gh-border-hover);
+
+.storage-link:hover { text-decoration: underline; }
+
+.sidebar-actions {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--op-rule);
 }
-.divider {
-  width: 1px;
-  height: 22px;
-  background: var(--gh-border);
-  flex: 0 0 auto;
+
+.sidebar-action,
+.account-button {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  color: var(--op-ink-soft);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
 }
-.page-title {
-  font-size: 14px;
-  font-weight: 700;
+
+.sidebar-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.sidebar-action:hover,
+.account-button:hover { color: var(--db-blue); background: var(--db-blue-soft); }
+
+.account-button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 50px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.account-avatar {
+  flex: none;
+  color: var(--db-blue);
+  background: var(--db-blue-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-copy {
+  display: grid;
+  flex: 1;
   min-width: 0;
-  flex: 1 1 auto;
+  line-height: 1.25;
+}
+
+.account-copy strong,
+.account-copy small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  flex: 0 0 auto;
-}
-.search {
-  width: 210px;
-}
-.tool {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 11px;
-  border: 1px solid var(--gh-border);
-  border-radius: 10px;
-  background: var(--gh-surface);
-  color: var(--gh-ink);
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.tool:hover {
-  background: var(--gh-primary-soft);
-  color: var(--gh-primary);
-  border-color: var(--gh-border-hover);
-}
-.tool.primary {
-  background: var(--gh-gradient);
-  border: 0;
-  border-radius: 10px;
-  color: #fff;
-  box-shadow: 0 6px 16px rgba(109, 123, 245, 0.35);
-}
-.tool.primary:hover {
-  filter: brightness(1.06);
-}
-.avatar-btn {
-  border: 0;
-  background: none;
-  padding: 0;
-  border-radius: 50%;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-.avatar-btn:hover {
-  box-shadow: 0 0 0 3px rgba(109, 123, 245, 0.22);
-}
-@media (max-width: 900px) {
-  .search {
-    display: none;
+
+.account-copy strong { font-size: 13px; font-weight: 600; }
+.account-copy small { margin-top: 2px; color: var(--op-ink-faint); font-size: 11px; }
+.account-chevron { flex: none; color: var(--op-ink-faint); }
+
+@media (max-width: 1040px) {
+  .sidebar {
+    inset: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    min-height: 62px;
+    padding: 9px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--op-rule);
   }
-  .tool span {
-    display: none;
+
+  .sidebar-top { flex: 1; min-width: 0; }
+  .sidebar-label,
+  .sidebar-spacer,
+  .storage-card { display: none; }
+
+  .sidebar-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
   }
-  .tool {
-    width: 34px;
-    padding: 0;
+
+  .sidebar-action {
+    width: 38px;
+    min-height: 38px;
     justify-content: center;
+    padding: 0;
   }
+
+  .sidebar-action span { display: none; }
+
+  .account-button {
+    width: auto;
+    min-height: 38px;
+    padding: 3px;
+  }
+
+  .account-copy,
+  .account-chevron { display: none; }
 }
-@media (max-width: 560px) {
-  .topbar {
-    padding: 0 12px;
-    gap: 8px;
-  }
-  .back-btn {
-    display: inline-flex;
-  }
-  .divider {
-    display: none;
-  }
-  .brand-btn :deep(.word) {
-    display: none;
-  }
+
+@media (max-width: 760px) {
+  .sidebar { padding-inline: 14px; }
 }
 </style>
 
 <style>
 .user-dropdown-head {
-  padding: 10px 14px 8px;
-  min-width: 160px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  gap: 3px;
+  max-width: 230px;
+  min-width: 170px;
+  padding: 10px 14px 7px;
 }
+
 .user-dropdown-head strong {
-  font-size: 13px;
-  color: var(--gh-ink);
   overflow: hidden;
+  color: var(--op-ink);
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .user-dropdown-head span {
+  color: var(--op-ink-faint);
   font-size: 11px;
-  color: var(--gh-ink-soft);
 }
 </style>
