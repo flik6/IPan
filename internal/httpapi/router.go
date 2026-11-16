@@ -66,7 +66,14 @@ func (s *Server) Handler() http.Handler {
 	// 静态资源 + SPA 回退
 	mux.HandleFunc("/", s.handleStatic)
 
-	return withMiddleware(mux)
+	return withMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Dispatch before ServeMux cleans paths or redirects non-GET requests.
+		if r.URL.Path == davPrefix || strings.HasPrefix(r.URL.Path, davPrefix+"/") {
+			s.handleDAV(w, r)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
 }
 
 // auth 包装需要登录的处理函数。

@@ -46,30 +46,74 @@ func (s *Server) detailSnapshot(r *http.Request) (map[string]any, error) {
 	}, nil
 }
 
-// GET /api/detail 账号信息，默认走缓存，refresh=1 强制回源。
+// GET /api/detail 账号信息。
+//
+// 缓存未过期直接返回；过期后由服务端自动回源，前端无需手动触发刷新。
+// refresh=1 仅用于强制回源（例如资料编辑保存后立刻要用新数据）。
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, wopan.Errorf(http.StatusMethodNotAllowed, "method not allowed"))
 		return
 	}
 	force := r.URL.Query().Get("refresh") == "1"
-	if !force {
-		if payload, cachedAt, err := s.store.LoadDetailCache(); err == nil && payload != nil {
-			var snapshot map[string]any
-			if json.Unmarshal(payload, &snapshot) == nil {
-				snapshot["cachedAt"] = cachedAt
-				snapshot["fromCache"] = true
-				snapshot["stale"] = time.Now().UnixMilli()-cachedAt > int64(detailCacheTTL/time.Millisecond)
-				writeJSON(w, http.StatusOK, snapshot)
-				return
-			}
-		}
+
+	// 快路径：缓存仍新鲜就直接返回，不进入锁
+	if payload, cachedAt, ok := s.cachedDetail(); ok && !force && !s.detailStale(cachedAt) {
+		s.writeCachedDetail(w, payload, cachedAt, false)
+		return
 	}
+
+	// 过期回源串行化：并发请求里只有一个真正打上游
+	s.detailMu.Lock()
+	defer s.detailMu.Unlock()
+
+	// 等锁期间可能已被别的请求回源过
+	if payload, cachedAt, ok := s.cachedDetail(); ok && !force && !s.detailStale(cachedAt) {
+		s.writeCachedDetail(w, payload, cachedAt, false)
+		return
+	}
+
 	fresh, err := s.detailSnapshot(r)
 	if err != nil {
+		// 回源失败时退回旧缓存，页面不至于变空白
+		if payload, cachedAt, ok := s.cachedDetail(); ok {
+			s.writeCachedDetail(w, payload, cachedAt, true)
+			return
+		}
 		writeError(w, err)
 		return
 	}
+	s.respondFreshDetail(w, fresh)
+}
+
+// cachedDetail 读取账号信息缓存原文。
+func (s *Server) cachedDetail() ([]byte, int64, bool) {
+	payload, cachedAt, err := s.store.LoadDetailCache()
+	if err != nil || payload == nil {
+		return nil, 0, false
+	}
+	return payload, cachedAt, true
+}
+
+func (s *Server) detailStale(cachedAt int64) bool {
+	return time.Now().UnixMilli()-cachedAt > int64(detailCacheTTL/time.Millisecond)
+}
+
+// writeCachedDetail 返回缓存快照，附加缓存时间与新鲜度标记。
+func (s *Server) writeCachedDetail(w http.ResponseWriter, payload []byte, cachedAt int64, stale bool) {
+	var snapshot map[string]any
+	if json.Unmarshal(payload, &snapshot) != nil {
+		writeError(w, wopan.Errorf(http.StatusInternalServerError, "账号信息缓存解析失败"))
+		return
+	}
+	snapshot["cachedAt"] = cachedAt
+	snapshot["fromCache"] = true
+	snapshot["stale"] = stale
+	writeJSON(w, http.StatusOK, snapshot)
+}
+
+// respondFreshDetail 回写缓存并返回刚抓取的账号信息。
+func (s *Server) respondFreshDetail(w http.ResponseWriter, fresh map[string]any) {
 	cachedAt := time.Now().UnixMilli()
 	if payload, merr := json.Marshal(fresh); merr == nil {
 		_ = s.store.SaveDetailCache(payload, cachedAt)

@@ -797,6 +797,9 @@ func (c *Client) UploadStream(ctx context.Context, directoryID, fileName string,
 	if err := c.requireToken(); err != nil {
 		return nil, err
 	}
+	if fileSize < 0 {
+		return nil, Errorf(400, "文件大小非法")
+	}
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -805,7 +808,10 @@ func (c *Client) UploadStream(ctx context.Context, directoryID, fileName string,
 	if err != nil {
 		return nil, Errorf(500, "参数加密失败: %v", err)
 	}
-	totalPart := int((fileSize + PartSize - 1) / PartSize)
+	totalPart := fileSize / PartSize
+	if fileSize%PartSize != 0 {
+		totalPart++
+	}
 	if totalPart < 1 {
 		totalPart = 1
 	}
@@ -817,14 +823,13 @@ func (c *Client) UploadStream(ctx context.Context, directoryID, fileName string,
 
 	buf := make([]byte, PartSize)
 	last := map[string]any{}
-	for partIndex := 1; partIndex <= totalPart; partIndex++ {
-		n, rerr := io.ReadFull(r, buf)
-		if rerr != nil && !errors.Is(rerr, io.ErrUnexpectedEOF) && !errors.Is(rerr, io.EOF) {
+	remaining := fileSize
+	for partIndex := 1; int64(partIndex) <= totalPart; partIndex++ {
+		n, rerr := io.ReadFull(r, buf[:min(remaining, PartSize)])
+		if rerr != nil {
 			return nil, Errorf(400, "读取上传数据失败: %v", rerr)
 		}
-		if n == 0 && partIndex > 1 {
-			break
-		}
+		remaining -= int64(n)
 		var body bytes.Buffer
 		mw := multipart.NewWriter(&body)
 		mw.WriteField("uniqueId", uniqueID)
@@ -832,7 +837,7 @@ func (c *Client) UploadStream(ctx context.Context, directoryID, fileName string,
 		mw.WriteField("fileName", fileName)
 		mw.WriteField("psToken", "undefined")
 		mw.WriteField("fileSize", strconv.FormatInt(fileSize, 10))
-		mw.WriteField("totalPart", strconv.Itoa(totalPart))
+		mw.WriteField("totalPart", strconv.FormatInt(totalPart, 10))
 		mw.WriteField("channel", ChannelWoCloud)
 		mw.WriteField("directoryId", directoryID)
 		mw.WriteField("fileInfo", encrypted)

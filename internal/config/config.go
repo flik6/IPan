@@ -33,6 +33,8 @@ type Config struct {
 	TrustProxy         bool
 	TokenCheckInterval int // 小时，0 表示禁用后台保活
 	EnablePasskey      bool
+	WebDAVUser         string
+	WebDAVPassword     string
 }
 
 func env(key, fallback string) string {
@@ -76,6 +78,8 @@ func Load() *Config {
 		TrustProxy:         envBool("IPAN_TRUST_PROXY", false),
 		TokenCheckInterval: interval,
 		EnablePasskey:      envBool("IPAN_ENABLE_PASSKEY", true),
+		WebDAVUser:         env("IPAN_WEBDAV_USER", ""),
+		WebDAVPassword:     os.Getenv("IPAN_WEBDAV_PASSWORD"),
 	}
 }
 

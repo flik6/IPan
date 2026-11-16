@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS detail_cache (
   payload   TEXT NOT NULL,
   cached_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS dav_properties (
+  resource TEXT PRIMARY KEY,
+  properties BLOB NOT NULL
+);
 `
 
 // Open 打开（必要时创建）数据目录与数据库。

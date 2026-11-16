@@ -110,10 +110,9 @@ func (s *Server) loginStatus() (map[string]any, error) {
 	}
 
 	locked := state != nil && !state.OK && (strings.Contains(state.Error, "8105") || strings.Contains(state.Error, "账户被锁定"))
-	intervalHours := float64(s.cfg.TokenCheckInterval)
-	if intervalHours <= 0 {
-		intervalHours = 1
-	}
+	// 展示的是令牌续期间隔（refresh token 滑动过期，2 天换一次），
+	// 而不是后台检查频率：检查可以更频繁，但真正换令牌按这个间隔。
+	intervalHours := refreshInterval.Hours()
 
 	var lastSuccess any
 	var nextRefresh any
@@ -122,7 +121,7 @@ func (s *Server) loginStatus() (map[string]any, error) {
 	if state != nil {
 		if state.SuccessAt > 0 {
 			lastSuccess = state.SuccessAt
-			nextRefresh = state.SuccessAt + int64(2*24*time.Hour/time.Millisecond)
+			nextRefresh = state.SuccessAt + int64(refreshInterval/time.Millisecond)
 		}
 		lastAttempt = state.AttemptedAt
 		if !state.OK {

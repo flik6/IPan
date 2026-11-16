@@ -21,6 +21,7 @@
 - **云盘登录**：手机号 + 短信验证码在线登录
 - **令牌保活**：后台定时器按 2 天间隔自动刷新令牌（滑动过期），长期不掉登录
 - **访问控制**：访问密码 + Passkey（WebAuthn）免密登录，会话 180 天
+- **WebDAV**：通过 `/dav/` 挂载已绑定的云盘空间，支持读写、文件锁和自定义属性
 - **界面**：Vue 3 + naive-ui，浅色/深色/跟随系统，桌面与移动端自适应
 
 ## 快速开始
@@ -43,6 +44,18 @@ docker build -t ipan:latest .
 docker run -d --name ipan -p 8080:8080 -v ipan-data:/app/data \
   -e TZ=Asia/Shanghai ipan:latest
 ```
+
+### GitHub Actions 自动构建
+
+推送到 `master`/`main` 或创建 `v*` 标签时，GitHub Actions 会自动构建并发布镜像到 GitHub Container Registry：
+
+```bash
+docker pull ghcr.io/flik6/ipan:latest
+docker run -d --name ipan -p 8080:8080 -v ipan-data:/app/data \
+  -e TZ=Asia/Shanghai ghcr.io/flik6/ipan:latest
+```
+
+镜像发布使用工作流内置的 `GITHUB_TOKEN`，不需要额外配置 Secret。若仓库的 Actions 默认权限被限制为只读，请在仓库 **Settings → Actions → General → Workflow permissions** 中选择 **Read and write permissions**。
 
 ### 本地运行（开发）
 
@@ -112,6 +125,37 @@ IPAN_PORT=8080
 IPAN_PUBLIC_URL=https://pan.example.com
 IPAN_TRUST_PROXY=true
 ```
+
+## WebDAV 挂载
+
+先绑定联通云盘账号，再同时设置 `IPAN_WEBDAV_USER` 和 `IPAN_WEBDAV_PASSWORD` 并重启 iPan。
+用户名不能包含冒号。这组凭据独立于网页访问密码，留空任意一项时 `/dav/` 返回 404。
+WebDAV 客户端填写 `https://你的域名/dav/`，可使用 Basic 或 Digest 认证。HTTP 连接使用 Digest。
+rclone 的存储类型选 `webdav`，供应商选 `other`。
+在反向代理后挂载时，设置 `IPAN_TRUST_PROXY=true` 并转发 `X-Forwarded-Proto`。将 `IPAN_PUBLIC_URL` 设为客户端使用的外部地址，确保 COPY 和 MOVE 的绝对目标地址能通过校验。 [RFC 7616](https://www.rfc-editor.org/rfc/rfc7616)
+
+支持 `OPTIONS`、`GET`、`HEAD`、`PUT`、`DELETE`、`MKCOL`、`COPY`、`MOVE`、`PROPFIND`、`PROPPATCH`、`LOCK` 和 `UNLOCK`。
+接口按 RFC 4918 实现。目录枚举支持 `Depth: 0` 和 `Depth: 1`，省略 Depth 或请求 `Depth: infinity` 时返回 403 和 `propfind-finite-depth`，客户端可逐层枚举。
+目录 COPY 支持 `Depth: 0` 和 `Depth: infinity`，目录 MOVE 和 DELETE 处理整个子树。 [RFC 4918](https://www.rfc-editor.org/rfc/rfc4918)
+
+`OPTIONS`、`PROPFIND`、`PROPPATCH`、`MKCOL` 和 `DELETE` 使用 Go 的 `x/net/webdav` 处理器。
+iPan 的适配层负责把路径转换为云盘 ID，并处理云端流式传输、原生复制与移动、写锁和属性持久化。 [Go WebDAV 包文档](https://pkg.go.dev/golang.org/x/net@v0.62.0/webdav)
+
+- 自定义属性保存在 SQLite。写锁在当前 iPan 进程的 WebDAV 请求之间生效，重启即失效。联通官方客户端和 iPan 网页可以独立修改云端文件。
+- 已知长度的 PUT 按 8 MB 分片上传。未知长度的请求先写入系统临时目录，以取得上游所需的文件长度。
+- 覆盖上传、复制和部分移动会创建以 `.ipan-dav-` 开头的临时条目。iPan 会尝试回滚失败的替换。进程中断或云端拒绝清理时，可能留下用于恢复的临时条目。
+
+### 与联通云盘桌面版对照
+
+下表来自本地 Windows 客户端 2.8.13 安装包和日志的静态检查。桌面端能力的实际请求和响应未做联机验证。
+
+| 能力 | 联通云盘桌面版 | iPan |
+| --- | --- | --- |
+| 列目录、建目录、改名 | `QueryAllFiles`、`CreateDirectory`、`RenameFileOrDirectory` | WebDAV 复用现有云盘调用，逐段将路径解析为 ID |
+| 下载、分片上传 | `GetDownloadUrlV2`、`/openapi/client/upload2C` | WebDAV 复用直链和分片上传，提供 GET、HEAD、Range 和 PUT |
+| 批量文件操作 | `/wohome/pass/file/batch/createTask` | WebDAV 复用 iPan 已有的 `DeleteFile`、`MoveFile`、`CopyFile` |
+| 属性、条件请求、锁 | 安装包的业务脚本和日志中未发现 DAV 入口 | 由 iPan 的 `/dav/` 实现 |
+| 搜索、回收站、文件版本 | `/wohome/pc/queryFilesByName`、`QueryRecycleData`、`/wohome/fileVersionDispatcher` | 目前无对应接口，属于 RFC 4918 之外的桌面功能 |
 
 ## 项目结构
 

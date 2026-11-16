@@ -33,6 +33,12 @@ type Server struct {
 
 	// 云盘令牌保活相关的进程内互斥
 	refreshMu sync.Mutex
+	// 账号信息回源互斥，避免并发请求同时打上游
+	detailMu sync.Mutex
+
+	davMu    sync.RWMutex
+	davLocks map[string]davLock
+	davAuth  davDigest
 }
 
 // ---------- 通用响应 ----------
@@ -305,5 +311,8 @@ func init() {
 
 // NewServer 构造服务实例。
 func NewServer(cfg *config.Config, st *store.Store, staticDir string) *Server {
-	return &Server{cfg: cfg, store: st, staticDir: staticDir}
+	return &Server{
+		cfg: cfg, store: st, staticDir: staticDir, davLocks: make(map[string]davLock),
+		davAuth: davDigest{secret: randomBase64URL(32), used: make(map[string]davNonceCount)},
+	}
 }
