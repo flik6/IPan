@@ -1,4 +1,4 @@
-// Package store 提供基于 SQLite 的持久化层，替代原 Worker 版本中的 KV。
+// Package store 提供基于 SQLite 的本地持久化层。
 //
 // 单文件数据库（data/ipan.db）即可承载全部状态：
 //   - settings      单例配置（访问密码、签名密钥、显示偏好）

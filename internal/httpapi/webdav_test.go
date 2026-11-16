@@ -391,8 +391,6 @@ func TestDAVDigestOnHTTP(t *testing.T) {
 		}
 		r.Header.Set("Depth", "0")
 		r.Header.Set("Authorization", auth)
-		// Forwarded headers only establish a secure origin when explicitly trusted.
-		r.Header.Set("X-Forwarded-Proto", "https")
 		res, err := server.Client().Do(r)
 		if err != nil {
 			t.Fatal(err)
@@ -431,6 +429,22 @@ func TestDAVDigestOnHTTP(t *testing.T) {
 		if got := request("PROPFIND", "/dav/", authorization(count)).StatusCode; got != 207 {
 			t.Fatalf("out-of-order Digest request %s failed: %d", count, got)
 		}
+	}
+
+	forwarded, err := http.NewRequest("PROPFIND", server.URL+"/dav/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwarded.Header.Set("Depth", "0")
+	forwarded.Header.Set("X-Forwarded-Proto", "https")
+	forwarded.SetBasicAuth("dav", "dav-test-password")
+	res, err := server.Client().Do(forwarded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusMultiStatus {
+		t.Fatalf("Basic auth via forwarded HTTPS: %d", res.StatusCode)
 	}
 }
 

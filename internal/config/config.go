@@ -1,8 +1,7 @@
 // Package config 负责从环境变量读取运行配置。
 //
-// 与原来的 Worker 版本不同，Go 版本有本地数据目录，因此访问密码、
-// 文件床签名密钥、云盘令牌等都可以直接持久化到 SQLite，
-// 不再依赖 KV 绑定。环境变量仅用于首次启动的预置值与部署参数。
+// 访问密码、文件床签名密钥、云盘令牌等持久化在 SQLite。
+// 环境变量仅用于首次启动的预置值与高级部署参数。
 package config
 
 import (
@@ -30,7 +29,6 @@ type Config struct {
 	WopanSpaceType     string
 	WopanFamilyID      string
 	PublicBaseURL      string
-	TrustProxy         bool
 	TokenCheckInterval int // 小时，0 表示禁用后台保活
 	EnablePasskey      bool
 	WebDAVUser         string
@@ -75,7 +73,6 @@ func Load() *Config {
 		WopanSpaceType:     env("WOPAN_SPACE_TYPE", "0"),
 		WopanFamilyID:      env("WOPAN_FAMILY_ID", ""),
 		PublicBaseURL:      strings.TrimSuffix(env("IPAN_PUBLIC_URL", ""), "/"),
-		TrustProxy:         envBool("IPAN_TRUST_PROXY", false),
 		TokenCheckInterval: interval,
 		EnablePasskey:      envBool("IPAN_ENABLE_PASSKEY", true),
 		WebDAVUser:         env("IPAN_WEBDAV_USER", ""),

@@ -23,9 +23,7 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"initialized": s.isInitialized(),
-		// Go 版本使用内置 SQLite，永远不需要额外绑定
-		"needsKv": false,
-		"version": Version,
+		"version":     Version,
 	})
 }
 
@@ -79,7 +77,7 @@ func (s *Server) issueSessionCookie(w http.ResponseWriter, r *http.Request, toke
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   s.isSecureRequest(r),
 		MaxAge:   int(sessionTTL.Seconds()),
 	})
 }
@@ -277,7 +275,6 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"signParamConfigured": settings.SignParam != "",
 		"showHidden":          settings.ShowHidden,
-		"kvBound":             true,
 		"webdavConfigured":    webdav.enabled(),
 		"webdavUsername":      webdav.Username,
 	})

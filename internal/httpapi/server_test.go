@@ -138,9 +138,6 @@ func TestSettingsAndPasswordChange(t *testing.T) {
 
 	rec := do(t, h, http.MethodGet, "/api/settings", "", "test1234")
 	body := decode(t, rec)
-	if body["kvBound"] != true {
-		t.Fatalf("Go 版本始终有本地存储，kvBound 应为 true: %v", body)
-	}
 	if body["signParamConfigured"] != true {
 		t.Fatalf("初始化时应生成签名密钥: %v", body)
 	}
@@ -440,5 +437,21 @@ func TestParseShareLink(t *testing.T) {
 		if got.ShareID != c.wantID || got.ShareCode != c.wantCode {
 			t.Errorf("%q 解析结果 = %+v，期望 %s/%s", c.input, got, c.wantID, c.wantCode)
 		}
+	}
+}
+
+func TestBaseURLUsesForwardedHeaders(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "http://internal:8080/api/direct", nil)
+	req.Host = "internal:8080"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "pan.example.com")
+	if got := srv.baseURL(req); got != "https://pan.example.com" {
+		t.Fatalf("forwarded base URL = %q", got)
+	}
+
+	req.Header.Set("X-Forwarded-Host", "bad host/path")
+	if got := srv.baseURL(req); got != "https://internal:8080" {
+		t.Fatalf("invalid forwarded host fallback = %q", got)
 	}
 }

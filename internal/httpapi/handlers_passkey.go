@@ -28,14 +28,9 @@ func (u *webauthnUser) WebAuthnName() string                       { return u.na
 func (u *webauthnUser) WebAuthnDisplayName() string                { return u.name }
 func (u *webauthnUser) WebAuthnCredentials() []webauthn.Credential { return u.credentials }
 
-// rpID 取请求域名；反向代理部署时需开启 IPAN_TRUST_PROXY 才能得到外部域名。
+// rpID 取外部请求域名，优先使用反向代理传递的 X-Forwarded-Host。
 func (s *Server) rpID(r *http.Request) string {
-	host := r.Host
-	if s.cfg.TrustProxy {
-		if xh := r.Header.Get("X-Forwarded-Host"); xh != "" {
-			host = strings.TrimSpace(strings.Split(xh, ",")[0])
-		}
-	}
+	host := requestHost(r)
 	if i := strings.LastIndex(host, ":"); i > 0 {
 		host = host[:i]
 	}
@@ -76,9 +71,8 @@ func (s *Server) loadUser() (*webauthnUser, error) {
 
 // passkeyChallengeSession 把挑战码暂存到会话里，随响应下发后续校验使用。
 //
-// 与原 Worker 版本的无状态 HMAC 挑战码不同，这里用 go-webauthn 内置的
-// SessionData（含 challenge），因此需要临时保存。为保持无状态部署体验，
-// 把 SessionData 编码后放进 HttpOnly Cookie，服务端不落库。
+// 使用 go-webauthn 内置的 SessionData（含 challenge），因此需要临时保存。
+// SessionData 编码后放进 HttpOnly Cookie，服务端不落库。
 const passkeySessionCookie = "ipan_passkey_session"
 
 func (s *Server) setPasskeySession(w http.ResponseWriter, r *http.Request, session *webauthn.SessionData) error {
@@ -102,7 +96,7 @@ func (s *Server) setPasskeySession(w http.ResponseWriter, r *http.Request, sessi
 		Path:     "/api/passkey/",
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   r.TLS != nil,
+		Secure:   s.isSecureRequest(r),
 		MaxAge:   300,
 	})
 	return nil
@@ -309,7 +303,7 @@ func (s *Server) handlePasskeyAuthVerify(w http.ResponseWriter, r *http.Request)
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   s.isSecureRequest(r),
 		MaxAge:   int(sessionTTL.Seconds()),
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "expiresInDays": 180})

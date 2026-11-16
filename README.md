@@ -2,12 +2,10 @@
 
 联通云盘（沃盘）的 Web 文件管理端。**Go 后端 + Vue 3 前端 + 内置 SQLite**，单个 Docker 容器即可部署。
 
-这是原 [Cloudflare Workers 版本](../wopan-cf-worker) 的重写版本：
-
-- **无需 KV / R2 绑定**：所有状态（访问密码、云盘令牌、平台分享、Passkey 凭证、会话）都存在容器内的 SQLite 文件里。
-- **无需 Wrangler / Cloudflare 账号**：任何能跑 Docker 的机器都能部署，也可以直接跑二进制文件。
-- **接口与前端完全兼容**：`/api/*` 的路径、请求体与响应结构与 Worker 版一致，Vue 前端从原项目迁移而来，只改了构建方式与少量文案。
-- **更适合大文件与长连接**：流式上传/下载、Range 断点续传、分片并发都由 Go 的原生 HTTP 处理，没有 Worker 的 CPU/内存限制。
+- **单容器部署**：前端、Go 服务和 SQLite 都打包在一个镜像里，也可以直接运行二进制文件。
+- **本地持久化**：访问密码、云盘令牌、分享、Passkey、Session 和 WebDAV 凭据都保存在 `ipan.db`。
+- **大文件友好**：流式上传/下载、Range 断点续传与分片上传由 Go HTTP 服务直接处理。
+- **后台配置**：首次访问设置访问密码，之后在网页内绑定云盘、配置 WebDAV 和显示偏好。
 
 ## 功能
 
@@ -81,7 +79,6 @@ go run ./cmd/ipan -listen :8080 -data ./data -static ./web/dist
 | `IPAN_LISTEN` | `:8080` | 容器内监听地址（直接跑二进制时使用） |
 | `IPAN_DATA_DIR` | `./data` | 数据目录，SQLite 文件为 `ipan.db` |
 | `IPAN_PUBLIC_URL` | 自动推断 | 生成分享链接时使用的站点地址，反向代理场景建议显式设置 |
-| `IPAN_TRUST_PROXY` | `false` | 信任 `X-Forwarded-*`。放在 Nginx/Traefik 后面时**必须**打开，否则 Passkey 拿不到正确域名 |
 | `WOPAN_BASE_URL` | `https://panservice.mail.wo.cn` | 云盘接口域名 |
 | `WOPAN_ZONE_URL` | 动态发现 | 上传域名；留空时通过 `GetZoneInfo` 自动发现 |
 | `WOPAN_SPACE_TYPE` | `0` | `0`=个人空间，`1`=家庭空间 |
@@ -113,13 +110,8 @@ server {
 }
 ```
 
-对应的 `.env`：
-
-```
-IPAN_PORT=8080
-IPAN_PUBLIC_URL=https://pan.example.com
-IPAN_TRUST_PROXY=true
-```
+无需额外环境变量。iPan 会自动读取 `Host`、`X-Forwarded-Proto` 和 `X-Forwarded-Host`；
+只有代理没有传递这些头时，才需要通过 `IPAN_PUBLIC_URL` 指定外部地址。
 
 ## WebDAV 挂载
 
@@ -127,7 +119,7 @@ IPAN_TRUST_PROXY=true
 用户名不能包含冒号；关闭 WebDAV 后 `/dav/` 返回 404。凭据保存在 SQLite，不保存明文密码。
 WebDAV 客户端填写 `https://你的域名/dav/`，可使用 Basic 或 Digest 认证。HTTP 连接使用 Digest。
 rclone 的存储类型选 `webdav`，供应商选 `other`。
-在反向代理后挂载时，设置 `IPAN_TRUST_PROXY=true` 并转发 `X-Forwarded-Proto`；将 `IPAN_PUBLIC_URL` 设为客户端使用的外部地址，确保 COPY 和 MOVE 的绝对目标地址能通过校验。 [RFC 7616](https://www.rfc-editor.org/rfc/rfc7616)
+在反向代理后挂载时，转发 `X-Forwarded-Proto` 与 `X-Forwarded-Host` 即可；也可将 `IPAN_PUBLIC_URL` 设为客户端使用的外部地址，确保 COPY 和 MOVE 的绝对目标地址能通过校验。 [RFC 7616](https://www.rfc-editor.org/rfc/rfc7616)
 
 支持 `OPTIONS`、`GET`、`HEAD`、`PUT`、`DELETE`、`MKCOL`、`COPY`、`MOVE`、`PROPFIND`、`PROPPATCH`、`LOCK` 和 `UNLOCK`。
 接口按 RFC 4918 实现。目录枚举支持 `Depth: 0` 和 `Depth: 1`，省略 Depth 或请求 `Depth: infinity` 时返回 403 和 `propfind-finite-depth`，客户端可逐层枚举。
@@ -165,7 +157,7 @@ web/                Vue 3 前端（由 Go 直接托管构建产物）
 
 ## 接口
 
-与原 Worker 版本保持一致，除特别说明外都需要 `Authorization: Bearer <访问密码>`。
+除特别说明外，接口都需要 `Authorization: Bearer <访问密码>`。
 
 ### 公开接口
 
@@ -230,4 +222,3 @@ docker cp ipan:/app/data/ipan.db ./ipan-backup.db
 - 联通云盘接口按 `fid` / `directoryId` 操作，不支持 `/a/b.txt` 路径寻址，必须先列目录拿 ID。
 - Passkey 需要域名访问；用 `IP 地址:端口` 打开时会提示改用域名。
 - 数据库采用单连接串行写入，适合个人/小团队使用，不是多租户设计。
-- 原 Worker 版的 KV 数据不会自动迁移，首次启动需要重新设置访问密码并绑定云盘。

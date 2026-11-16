@@ -101,7 +101,6 @@ export interface AuthCheckResult {
 /** 首次部署的初始化状态（公开接口） */
 export interface SetupStatusResult {
   initialized: boolean;
-  needsKv: boolean;
 }
 
 export interface LoginStatusResult {
@@ -142,7 +141,6 @@ export interface DetailResult {
 export interface AppSettingsResult {
   signParamConfigured: boolean;
   showHidden: boolean;
-  kvBound: boolean;
   webdavConfigured: boolean;
   webdavUsername: string;
 }

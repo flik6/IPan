@@ -69,7 +69,7 @@ func TestTokenKeyPadsShortTokens(t *testing.T) {
 }
 
 func TestMD5(t *testing.T) {
-	// 与原 Worker 实现（crypto.ts）相同的输入输出，用于校验文件床签名
+	// 固定输入输出，用于校验文件床签名
 	if got := MD5("abc"); got != "900150983cd24fb0d6963f7d28e17f72" {
 		t.Fatalf("MD5(abc) = %s", got)
 	}

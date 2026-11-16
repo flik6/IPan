@@ -78,8 +78,7 @@ type davNonceCount struct {
 }
 
 func (s *Server) authenticateDAV(w http.ResponseWriter, r *http.Request, creds davCredentials) bool {
-	proto, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Proto"), ",")
-	secure := r.TLS != nil || s.cfg.TrustProxy && strings.EqualFold(strings.TrimSpace(proto), "https")
+	secure := s.isSecureRequest(r)
 	if secure {
 		gotUser, gotPassword, ok := r.BasicAuth()
 		supplied := fmt.Sprintf("%x", sha256.Sum256([]byte(gotUser+":"+davRealm+":"+gotPassword)))

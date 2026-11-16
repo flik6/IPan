@@ -90,8 +90,7 @@ func (s *Server) refreshWithContext(ctx context.Context, force bool) (RefreshRes
 
 // StartTokenMaintenance 启动后台保活循环，返回停止函数。
 //
-// 原 Worker 版本靠 Cron Trigger 触发；Go 版本改用进程内定时器，
-// 每小时检查一次，满足 2 天间隔才真正刷新。
+// 使用进程内定时器定期检查，满足 2 天间隔才真正刷新。
 func (s *Server) StartTokenMaintenance(ctx context.Context) func() {
 	if s.cfg.TokenCheckInterval <= 0 {
 		return func() {}

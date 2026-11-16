@@ -1,5 +1,4 @@
-// Package httpapi 提供 HTTP 接口层，路由与响应结构与原 Worker 版本保持一致，
-// 使现成的 Vue 前端可以原样复用。
+// Package httpapi 提供 HTTP 接口层，供 Vue 前端与 API 客户端调用。
 package httpapi
 
 import (
@@ -245,36 +244,42 @@ func (s *Server) baseURL(r *http.Request) string {
 	if s.cfg.PublicBaseURL != "" {
 		return s.cfg.PublicBaseURL
 	}
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	if s.cfg.TrustProxy {
-		if xf := r.Header.Get("X-Forwarded-Proto"); xf != "" {
-			scheme = strings.TrimSpace(strings.Split(xf, ",")[0])
-		}
-	}
-	host := r.Host
-	if s.cfg.TrustProxy {
-		if xh := r.Header.Get("X-Forwarded-Host"); xh != "" {
-			host = strings.TrimSpace(strings.Split(xh, ",")[0])
-		}
-	}
-	return scheme + "://" + host
+	return requestScheme(r) + "://" + requestHost(r)
 }
 
-// clientIP 返回客户端地址（考虑反向代理）。
-func (s *Server) clientIP(r *http.Request) string {
-	if s.cfg.TrustProxy {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			return strings.TrimSpace(strings.Split(xff, ",")[0])
-		}
+func firstForwardedValue(value string) string {
+	return strings.TrimSpace(strings.Split(value, ",")[0])
+}
+
+func requestScheme(r *http.Request) string {
+	if r.TLS != nil {
+		return "https"
 	}
-	host := r.RemoteAddr
-	if i := strings.LastIndex(host, ":"); i > 0 {
-		host = host[:i]
+	switch scheme := strings.ToLower(firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))); scheme {
+	case "http", "https":
+		return scheme
+	default:
+		return "http"
 	}
-	return host
+}
+
+func validForwardedHost(host string) bool {
+	if host == "" || strings.ContainsAny(host, "/\\\t\r\n ") {
+		return false
+	}
+	u, err := url.Parse("http://" + host)
+	return err == nil && u.Host == host && u.Path == ""
+}
+
+func requestHost(r *http.Request) string {
+	if forwarded := firstForwardedValue(r.Header.Get("X-Forwarded-Host")); validForwardedHost(forwarded) {
+		return forwarded
+	}
+	return r.Host
+}
+
+func (s *Server) isSecureRequest(r *http.Request) bool {
+	return requestScheme(r) == "https"
 }
 
 func sanitizeFilename(name string) string {

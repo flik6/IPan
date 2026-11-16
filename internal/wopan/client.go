@@ -1,7 +1,7 @@
 // Package wopan 是联通云盘（沃盘）开放接口的 Go 客户端。
 //
-// 移植自 wopan-sdk-go / 本项目原 Cloudflare Worker 实现（src/server/wopan.ts），
-// 保留原有的加密方式（AES-CBC + base64）、请求签名与令牌自动刷新逻辑。
+// 对接联通云盘开放接口，使用 AES-CBC + base64 加密参数，
+// 并处理请求签名与令牌自动刷新。
 package wopan
 
 import (

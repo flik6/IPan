@@ -7,8 +7,6 @@ interface SettingsState {
   showHidden: boolean;
   /** 签名密钥是否已配置（未配置时服务端会随机生成一个） */
   signParamConfigured: boolean;
-  /** 服务端是否可持久化设置（Go 版本始终为 true，保留字段兼容前端） */
-  kvBound: boolean;
   webdavConfigured: boolean;
   webdavUsername: string;
   loaded: boolean;
@@ -17,7 +15,6 @@ interface SettingsState {
 export const settings = reactive<SettingsState>({
   showHidden: false,
   signParamConfigured: false,
-  kvBound: true,
   webdavConfigured: false,
   webdavUsername: "",
   loaded: false,
@@ -37,7 +34,6 @@ export async function loadSettings(): Promise<AppSettingsResult | null> {
 export function applySettings(data: Partial<AppSettingsResult>): void {
   if (data.showHidden !== undefined) settings.showHidden = !!data.showHidden;
   if (data.signParamConfigured !== undefined) settings.signParamConfigured = !!data.signParamConfigured;
-  if (data.kvBound !== undefined) settings.kvBound = !!data.kvBound;
   if (data.webdavConfigured !== undefined) settings.webdavConfigured = !!data.webdavConfigured;
   if (data.webdavUsername !== undefined) settings.webdavUsername = data.webdavUsername;
   settings.loaded = true;

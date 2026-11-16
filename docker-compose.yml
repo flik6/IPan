@@ -8,8 +8,6 @@ services:
     environment:
       TZ: Asia/Shanghai
       IPAN_DATA_DIR: /app/data
-      # 反向代理（Nginx / Traefik）后面部署时打开，用于识别真实域名与协议
-      # IPAN_TRUST_PROXY: "true"
     volumes:
       - ipan-data:/app/data
     healthcheck:
