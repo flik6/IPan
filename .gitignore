@@ -18,6 +18,10 @@
 *.local
 .dev.vars
 
+# Agent / 设计过程文件
+/.claude/
+/.oil-ui/
+
 # 编辑器
 .idea/
 .vscode/
