@@ -35,6 +35,10 @@ docker compose up -d
 数据保存在名为 `ipan-data` 的 Docker 卷里（挂载到容器的 `/app/data`），重建容器不会丢失。
 普通使用不需要 `.env` 或配置文件，访问密码、云盘绑定、WebDAV 凭据都在网页后台设置。
 
+如果启动后出现 `unable to open database file (14)`，通常是数据目录权限问题。新版镜像会自动修正
+named volume 的权限后再降权运行；使用 NAS bind mount 时，请确保宿主机目录允许 UID `100`、GID `101`
+写入，或在宿主机执行一次 `chown -R 100:101 /你的数据目录`。
+
 ### Docker（不使用 compose）
 
 ```bash

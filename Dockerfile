@@ -23,18 +23,20 @@ RUN go build -trimpath -ldflags="-s -w -X ipan/internal/httpapi.Version=${VERSIO
 
 # ---------- 运行镜像 ----------
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk add --no-cache ca-certificates tzdata su-exec \
     && addgroup -S ipan && adduser -S -G ipan -h /app ipan
 WORKDIR /app
 
 COPY --from=build /out/ipan /app/ipan
 COPY --from=web /src/web/dist /app/web/dist
+COPY docker-entrypoint.sh /usr/local/bin/ipan-entrypoint
 
 # 数据目录（SQLite）需要持久化
-RUN mkdir -p /app/data && chown -R ipan:ipan /app
+RUN mkdir -p /app/data && chown -R ipan:ipan /app \
+    && sed -i 's/\r$//' /usr/local/bin/ipan-entrypoint \
+    && chmod 0755 /usr/local/bin/ipan-entrypoint
 VOLUME ["/app/data"]
 
-USER ipan
 ENV IPAN_LISTEN=:8080 \
     IPAN_DATA_DIR=/app/data \
     TZ=Asia/Shanghai
@@ -44,5 +46,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- "http://127.0.0.1:8080/api/setup/status" >/dev/null 2>&1 || exit 1
 
-ENTRYPOINT ["/app/ipan"]
+ENTRYPOINT ["/usr/local/bin/ipan-entrypoint"]
 CMD ["-static", "/app/web/dist"]
